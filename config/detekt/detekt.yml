@@ -1,0 +1,282 @@
+config:
+  validation: true
+  warningsAsErrors: true
+
+clean-code:
+  active: true
+  LogicalNestingDepth:
+    active: true
+    allowedDepth: 2
+  NoMutableCollectionExposure:
+    active: true
+  MaximumFunctionLength:
+    active: true
+    allowedLines: 80
+
+complexity:
+  active: true
+  CognitiveComplexMethod:
+    active: true
+    allowedComplexity: 10
+  LongMethod:
+    active: true
+    allowedLines: 30
+  LongParameterList:
+    active: true
+    allowedFunctionParameters: 4
+    allowedConstructorParameters: 6
+    ignoreDataClasses: false
+    ignoreDefaultParameters: false
+  NestedScopeFunctions:
+    active: true
+    allowedDepth: 1
+  LargeClass:
+    active: true
+    allowedLines: 300
+    severity: warning
+  # LogicalNestingDepth traverses DSL bodies that the built-in rule can miss.
+  NestedBlockDepth:
+    active: false
+  TooManyFunctions:
+    active: false
+
+naming:
+  active: true
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][A-Za-z0-9]*'
+  FunctionNaming:
+    active: true
+    functionPattern: '[a-z][A-Za-z0-9]*'
+  FunctionParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+  ConstructorParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+    privateParameterPattern: '_?[a-z][A-Za-z0-9]*'
+  VariableNaming:
+    active: true
+    variablePattern: '[a-z][A-Za-z0-9]*'
+    privateVariablePattern: '_?[a-z][A-Za-z0-9]*'
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)*'
+  EnumNaming:
+    active: true
+    enumEntryPattern: '[A-Z][A-Z0-9]*(_[A-Z0-9]+)*'
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][A-Z0-9]*(_[A-Z0-9]+)*'
+    propertyPattern: '[a-z][A-Za-z0-9]*'
+    privatePropertyPattern: '_?[a-z][A-Za-z0-9]*'
+  ObjectPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][A-Z0-9]*(_[A-Z0-9]+)*'
+    propertyPattern: '[a-z][A-Za-z0-9]*'
+    privatePropertyPattern: '_?[a-z][A-Za-z0-9]*'
+  MatchingDeclarationName:
+    active: true
+  InvalidPackageDeclaration:
+    active: true
+
+potential-bugs:
+  active: true
+  UnsafeCallOnNullableType:
+    active: true
+  UnnecessaryNotNullOperator:
+    active: true
+  UnsafeCast:
+    active: true
+  CastNullableToNonNullableType:
+    active: true
+    ignorePlatformTypes: false
+  CastToNullableType:
+    active: true
+  LateinitUsage:
+    active: true
+  DontDowncastCollectionTypes:
+    active: true
+  DoubleMutabilityForCollection:
+    active: true
+
+empty-blocks:
+  active: true
+  EmptyCatchBlock:
+    active: true
+    allowedExceptionNameRegex: '$^'
+
+exceptions:
+  active: true
+  NotImplementedDeclaration:
+    active: true
+  PrintStackTrace:
+    active: true
+  ReturnFromFinally:
+    active: true
+    ignoreLabeled: false
+  ThrowingExceptionFromFinally:
+    active: true
+  SwallowedException:
+    active: true
+    ignoredExceptionTypes: []
+    allowedExceptionNameRegex: '$^'
+  TooGenericExceptionCaught:
+    active: true
+    excludes: []
+    exceptionNames: ['Exception', 'RuntimeException', 'Throwable', 'Error']
+    allowedExceptionNameRegex: '$^'
+  TooGenericExceptionThrown:
+    active: true
+    exceptionNames: ['Exception', 'RuntimeException', 'Throwable', 'Error']
+
+style:
+  active: true
+  DataClassShouldBeImmutable:
+    active: true
+  VarCouldBeVal:
+    active: true
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - value: 'kotlin.io.print'
+        reason: 'Use the application logger.'
+      - value: 'kotlin.io.println'
+        reason: 'Use the application logger.'
+      - value: 'java.io.PrintStream.print'
+        reason: 'Use the application logger.'
+      - value: 'java.io.PrintStream.println'
+        reason: 'Use the application logger.'
+      - value: 'java.lang.System.exit'
+        reason: 'Let Spring manage application shutdown.'
+      - value: 'java.lang.Runtime.exit'
+        reason: 'Let Spring manage application shutdown.'
+      - value: 'java.lang.Runtime.halt'
+        reason: 'Let Spring manage application shutdown.'
+      - value: 'kotlin.system.exitProcess'
+        reason: 'Let Spring manage application shutdown.'
+  ForbiddenSuppress:
+    active: true
+    # Native detekt matches literal spellings. Exception scope and rationale are reviewed.
+    rules:
+      - 'all'
+      - 'detekt:all'
+      - 'detekt.all'
+      - 'ALL'
+      - 'detekt:ALL'
+      - 'detekt.ALL'
+      - 'All'
+      - 'detekt:All'
+      - 'detekt.All'
+      - 'complexity'
+      - 'detekt:complexity'
+      - 'detekt.complexity'
+      - 'naming'
+      - 'detekt:naming'
+      - 'detekt.naming'
+      - 'potential-bugs'
+      - 'detekt:potential-bugs'
+      - 'detekt.potential-bugs'
+      - 'empty-blocks'
+      - 'detekt:empty-blocks'
+      - 'detekt.empty-blocks'
+      - 'exceptions'
+      - 'detekt:exceptions'
+      - 'detekt.exceptions'
+      - 'style'
+      - 'detekt:style'
+      - 'detekt.style'
+      - 'clean-code'
+      - 'detekt:clean-code'
+      - 'detekt.clean-code'
+      - 'UnsafeCallOnNullableType'
+      - 'potential-bugs:UnsafeCallOnNullableType'
+      - 'potential-bugs.UnsafeCallOnNullableType'
+      - 'detekt:UnsafeCallOnNullableType'
+      - 'detekt.UnsafeCallOnNullableType'
+      - 'detekt:potential-bugs:UnsafeCallOnNullableType'
+      - 'detekt.potential-bugs.UnsafeCallOnNullableType'
+      - 'UnnecessaryNotNullOperator'
+      - 'potential-bugs:UnnecessaryNotNullOperator'
+      - 'potential-bugs.UnnecessaryNotNullOperator'
+      - 'detekt:UnnecessaryNotNullOperator'
+      - 'detekt.UnnecessaryNotNullOperator'
+      - 'detekt:potential-bugs:UnnecessaryNotNullOperator'
+      - 'detekt.potential-bugs.UnnecessaryNotNullOperator'
+      - 'LateinitUsage'
+      - 'potential-bugs:LateinitUsage'
+      - 'potential-bugs.LateinitUsage'
+      - 'detekt:LateinitUsage'
+      - 'detekt.LateinitUsage'
+      - 'detekt:potential-bugs:LateinitUsage'
+      - 'detekt.potential-bugs.LateinitUsage'
+      - 'NotImplementedDeclaration'
+      - 'exceptions:NotImplementedDeclaration'
+      - 'exceptions.NotImplementedDeclaration'
+      - 'detekt:NotImplementedDeclaration'
+      - 'detekt.NotImplementedDeclaration'
+      - 'detekt:exceptions:NotImplementedDeclaration'
+      - 'detekt.exceptions.NotImplementedDeclaration'
+      - 'SwallowedException'
+      - 'exceptions:SwallowedException'
+      - 'exceptions.SwallowedException'
+      - 'detekt:SwallowedException'
+      - 'detekt.SwallowedException'
+      - 'detekt:exceptions:SwallowedException'
+      - 'detekt.exceptions.SwallowedException'
+      - 'ReturnFromFinally'
+      - 'exceptions:ReturnFromFinally'
+      - 'exceptions.ReturnFromFinally'
+      - 'detekt:ReturnFromFinally'
+      - 'detekt.ReturnFromFinally'
+      - 'detekt:exceptions:ReturnFromFinally'
+      - 'detekt.exceptions.ReturnFromFinally'
+      - 'ThrowingExceptionFromFinally'
+      - 'exceptions:ThrowingExceptionFromFinally'
+      - 'exceptions.ThrowingExceptionFromFinally'
+      - 'detekt:ThrowingExceptionFromFinally'
+      - 'detekt.ThrowingExceptionFromFinally'
+      - 'detekt:exceptions:ThrowingExceptionFromFinally'
+      - 'detekt.exceptions.ThrowingExceptionFromFinally'
+      - 'ForbiddenMethodCall'
+      - 'style:ForbiddenMethodCall'
+      - 'style.ForbiddenMethodCall'
+      - 'detekt:ForbiddenMethodCall'
+      - 'detekt.ForbiddenMethodCall'
+      - 'detekt:style:ForbiddenMethodCall'
+      - 'detekt.style.ForbiddenMethodCall'
+      - 'DataClassShouldBeImmutable'
+      - 'style:DataClassShouldBeImmutable'
+      - 'style.DataClassShouldBeImmutable'
+      - 'detekt:DataClassShouldBeImmutable'
+      - 'detekt.DataClassShouldBeImmutable'
+      - 'detekt:style:DataClassShouldBeImmutable'
+      - 'detekt.style.DataClassShouldBeImmutable'
+      - 'EmptyCatchBlock'
+      - 'empty-blocks:EmptyCatchBlock'
+      - 'empty-blocks.EmptyCatchBlock'
+      - 'detekt:EmptyCatchBlock'
+      - 'detekt.EmptyCatchBlock'
+      - 'detekt:empty-blocks:EmptyCatchBlock'
+      - 'detekt.empty-blocks.EmptyCatchBlock'
+      - 'LogicalNestingDepth'
+      - 'clean-code:LogicalNestingDepth'
+      - 'clean-code.LogicalNestingDepth'
+      - 'detekt:LogicalNestingDepth'
+      - 'detekt.LogicalNestingDepth'
+      - 'detekt:clean-code:LogicalNestingDepth'
+      - 'detekt.clean-code.LogicalNestingDepth'
+      - 'NoMutableCollectionExposure'
+      - 'clean-code:NoMutableCollectionExposure'
+      - 'clean-code.NoMutableCollectionExposure'
+      - 'detekt:NoMutableCollectionExposure'
+      - 'detekt.NoMutableCollectionExposure'
+      - 'detekt:clean-code:NoMutableCollectionExposure'
+      - 'detekt.clean-code.NoMutableCollectionExposure'
+      - 'MaximumFunctionLength'
+      - 'clean-code:MaximumFunctionLength'
+      - 'clean-code.MaximumFunctionLength'
+      - 'detekt:MaximumFunctionLength'
+      - 'detekt.MaximumFunctionLength'
+      - 'detekt:clean-code:MaximumFunctionLength'
+      - 'detekt.clean-code.MaximumFunctionLength'

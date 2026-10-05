@@ -1,0 +1,56 @@
+= Todo API
+:doctype: book
+:toc: left
+:toclevels: 2
+:sectnums:
+:source-highlighter: highlight.js
+
+이 문서는 실제 애플리케이션과 데이터베이스를 사용하는 테스트에서 생성합니다.
+요청 또는 응답 필드가 문서와 달라지면 REST Docs 테스트가 실패합니다.
+예시의 `https://api.example.com`은 설명용 주소이며 로컬 실행 주소는 `http://localhost:8080`입니다.
+
+== 할 일 생성
+
+include::{snippets}/todos-create/http-request.adoc[]
+include::{snippets}/todos-create/request-fields.adoc[]
+include::{snippets}/todos-create/http-response.adoc[]
+include::{snippets}/todos-create/response-headers.adoc[]
+include::{snippets}/todos-create/response-fields.adoc[]
+include::{snippets}/todos-create/curl-request.adoc[]
+
+== 할 일 조회
+
+include::{snippets}/todos-get/http-request.adoc[]
+include::{snippets}/todos-get/path-parameters.adoc[]
+include::{snippets}/todos-get/http-response.adoc[]
+include::{snippets}/todos-get/response-fields.adoc[]
+
+== 할 일 목록
+
+include::{snippets}/todos-list/http-request.adoc[]
+include::{snippets}/todos-list/http-response.adoc[]
+include::{snippets}/todos-list/response-fields.adoc[]
+
+== 할 일 완료
+
+같은 할 일에 반복해서 요청해도 완료된 상태를 유지합니다.
+
+include::{snippets}/todos-complete/http-request.adoc[]
+include::{snippets}/todos-complete/path-parameters.adoc[]
+include::{snippets}/todos-complete/http-response.adoc[]
+include::{snippets}/todos-complete/response-fields.adoc[]
+
+== 오류
+
+=== 올바르지 않은 제목
+
+include::{snippets}/todos-invalid-title/http-request.adoc[]
+include::{snippets}/todos-invalid-title/http-response.adoc[]
+include::{snippets}/todos-invalid-title/response-fields.adoc[]
+
+=== 존재하지 않는 할 일
+
+include::{snippets}/todos-not-found/http-request.adoc[]
+include::{snippets}/todos-not-found/path-parameters.adoc[]
+include::{snippets}/todos-not-found/http-response.adoc[]
+include::{snippets}/todos-not-found/response-fields.adoc[]

@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      deployable: ${{ steps.repository.outputs.deployable }}
+    steps:
+      - name: Check repository deployment role
+        if: github.event_name == 'push'
+        id: repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          is_template="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.is_template')"
+          case "$is_template" in
+            true)
+              echo "deployable=false" >> "$GITHUB_OUTPUT"
+              echo "Template repository: application deployment is skipped." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            false)
+              echo "deployable=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::Could not determine whether this repository is a template."
+              exit 1
+              ;;
+          esac
+      - name: Check out the source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up Java 25
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Verify deployment automation without network access
+        run: python3 -m unittest discover -s scripts/tests -p 'test_deploy.py' -v
+      - name: Format, lint, test and generate API documentation
+        run: ./gradlew build --no-daemon
+      - name: Require committed formatting changes
+        run: git diff --exit-code
+      - name: Save the tested application
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: application-${{ github.sha }}
+          path: build/libs/application.jar
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+      - name: Save test reports and API documentation
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/reports/
+            build/docs/
+            quality-rules/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deploy:
+    name: Publish and request deployment
+    if: github.event_name == 'push' && needs.verify.outputs.deployable == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: homelab-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download the tested application
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: application-${{ github.sha }}
+          path: build/libs/
+      - name: Derive deployment names from the repository
+        id: metadata
+        run: python3 scripts/deploy.py metadata
+      # SMS must trust this repository, workflow and main/master ref first.
+      - name: Load registry credentials through GitHub OIDC
+        uses: robinjoon-homelab/Simple-K3S-Herness/.github/actions/load-ci-secrets@v1.0.0
+        with:
+          app: zot
+      - name: Load harness credentials through GitHub OIDC
+        uses: robinjoon-homelab/Simple-K3S-Herness/.github/actions/load-ci-secrets@v1.0.0
+        with:
+          app: harness
+      - name: Validate platform credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in REGISTRY_USERNAME REGISTRY_PASSWORD HARNESS_ACTIONS_TOKEN; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::SMS did not provide ${name}; check the platform OIDC policy."
+              exit 1
+            fi
+          done
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Log in to the home registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: registry.homelab.robinjoon.xyz
+          username: ${{ env.REGISTRY_USERNAME }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+      - name: Publish the tested application image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.metadata.outputs.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+      - name: Create the workload or release its image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_TAG: ${{ steps.metadata.outputs.tag }}
+        run: python3 scripts/deploy.py apply

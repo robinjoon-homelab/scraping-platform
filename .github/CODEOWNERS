@@ -1,0 +1,26 @@
+# Template users must replace @robinjoon with maintainers who have write access.
+# Required ownership reviews take effect only after importing the ruleset in GitHub.
+# Include another maintainer: authors cannot approve their own pull requests.
+
+# Protect the checks, their configuration, and this ownership policy.
+/.github/ @robinjoon
+*.gradle.kts @robinjoon
+*.gradle @robinjoon
+gradle.properties @robinjoon
+/gradle/ @robinjoon
+/gradlew @robinjoon
+/gradlew.bat @robinjoon
+.editorconfig @robinjoon
+/.gitattributes @robinjoon
+/.gitignore @robinjoon
+/config/detekt/ @robinjoon
+/quality-rules/ @robinjoon
+**/architecture/ @robinjoon
+**/architecturefixtures/ @robinjoon
+/scripts/tests/ @robinjoon
+
+# Keep developer instructions aligned with the enforced policy.
+/AGENTS.md @robinjoon
+/CLAUDE.md @robinjoon
+/docs/code-quality.md @robinjoon
+/docs/development.md @robinjoon

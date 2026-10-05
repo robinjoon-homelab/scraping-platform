@@ -1,0 +1,16 @@
+# Only these test-specific differences override the shared policy.
+complexity:
+  LongMethod:
+    allowedLines: 80
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Test', 'ParameterizedTest', 'RepeatedTest', 'TestFactory', 'TestTemplate']
+
+potential-bugs:
+  LateinitUsage:
+    ignoreAnnotated: ['Autowired', 'Inject', 'Resource']
+
+style:
+  VarCouldBeVal:
+    ignoreAnnotated: ['Autowired', 'Inject', 'Resource', 'LocalServerPort']
