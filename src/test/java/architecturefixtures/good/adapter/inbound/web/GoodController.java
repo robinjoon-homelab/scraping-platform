@@ -3,6 +3,7 @@ package architecturefixtures.good.adapter.inbound.web;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RestController;
 import architecturefixtures.good.application.port.input.Input;
+import architecturefixtures.good.domain.Value;
 
 @RestController
 class GoodController {
@@ -11,5 +12,9 @@ class GoodController {
     @Autowired
     GoodController(Input input) {
         this.input = input;
+    }
+
+    public Value get() {
+        return input.get();
     }
 }

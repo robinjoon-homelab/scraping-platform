@@ -1,6 +1,6 @@
 spring:
   application:
-    name: kotlin-springboot-exposed-template
+    name: scraping-platform
   threads:
     virtual:
       enabled: true
@@ -16,11 +16,17 @@ spring:
       connection-timeout: 30000
   flyway:
     enabled: true
+  exposed:
+    generate-ddl: false
   mvc:
     problemdetails:
       enabled: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
+
+scraping:
+  security:
+    api-token: ${SCRAPING_API_TOKEN:}
 
 server:
   port: ${PORT:8080}

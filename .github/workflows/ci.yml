@@ -5,6 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main, master]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,7 +23,7 @@ jobs:
       deployable: ${{ steps.repository.outputs.deployable }}
     steps:
       - name: Check repository deployment role
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         id: repository
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,13 +59,13 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
       - name: Verify deployment automation without network access
-        run: python3 -m unittest discover -s scripts/tests -p 'test_deploy.py' -v
+        run: python3 -m unittest discover -s scripts/tests -v
       - name: Format, lint, test and generate API documentation
         run: ./gradlew build --no-daemon
       - name: Require committed formatting changes
         run: git diff --exit-code
       - name: Save the tested application
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: application-${{ github.sha }}
@@ -86,7 +87,10 @@ jobs:
 
   deploy:
     name: Publish and request deployment
-    if: github.event_name == 'push' && needs.verify.outputs.deployable == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    if: >-
+      needs.verify.outputs.deployable == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -96,6 +100,10 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      APP_NAME: scraping-platform
+      REGISTRY_HOST: ${{ vars.HOMELAB_REGISTRY_HOST }}
+      REGISTRY_IMAGE: ${{ vars.HOMELAB_REGISTRY_IMAGE }}
     steps:
       - name: Check out the verified commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -107,7 +115,7 @@ jobs:
         with:
           name: application-${{ github.sha }}
           path: build/libs/
-      - name: Derive deployment names from the repository
+      - name: Validate deployment names and set the image tag
         id: metadata
         run: python3 scripts/deploy.py metadata
       # SMS must trust this repository, workflow and main/master ref first.
@@ -134,7 +142,7 @@ jobs:
       - name: Log in to the home registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          registry: registry.homelab.robinjoon.xyz
+          registry: ${{ env.REGISTRY_HOST }}
           username: ${{ env.REGISTRY_USERNAME }}
           password: ${{ env.REGISTRY_PASSWORD }}
       - name: Publish the tested application image

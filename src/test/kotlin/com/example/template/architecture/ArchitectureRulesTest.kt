@@ -22,6 +22,29 @@ class ArchitectureRulesTest {
         }
 
     @TestFactory
+    fun `controllers and repositories cannot declare or inherit transactions`(): List<DynamicTest> =
+        listOf(
+            "ClassTransactional",
+            "MethodTransactional",
+            "ComposedClassTransactional",
+            "ComposedMethodTransactional",
+            "InheritedClassTransactional",
+            "InheritedMethodTransactional",
+            "InterfaceClassTransactional",
+            "InterfaceMethodTransactional",
+        ).flatMap { prefix -> listOf("${prefix}Controller", "${prefix}Repository") }
+            .map { name ->
+                DynamicTest.dynamicTest(name) {
+                    val target = badClasses.that(DescribedPredicate.describe(name) { it.simpleName == name })
+                    assertThat(target).hasSize(1)
+
+                    val result = badRules.adapterTransactions.evaluate(target)
+                    assertThat(result.hasViolation()).isTrue()
+                    assertThat(result.failureReport.details.joinToString("\n")).contains(name)
+                }
+            }
+
+    @TestFactory
     fun `valid constructor injection ports and pure types pass all rules`(): List<DynamicTest> =
         ArchitectureRules("$FIXTURES.good").all().map { rule ->
             DynamicTest.dynamicTest(rule.description) { rule.check(goodClasses) }
@@ -61,8 +84,16 @@ class ArchitectureRulesTest {
     private fun negativeCases(): List<Pair<ArchRule, List<String>>> =
         listOf(
             badRules.approvedLocations to listOf("UnassignedClass", "HelperKt"),
-            badRules.pureDomain to listOf("ApplicationDependency", "MisplacedController"),
-            badRules.pureApplication to listOf("BadService"),
+            badRules.pureDomain to listOf("ApplicationDependency", "MisplacedController", "TransactionalDomain"),
+            badRules.pureApplication to
+                listOf(
+                    "BadService",
+                    "TransactionalInputPort",
+                    "TransactionalOutputPort",
+                    "ServiceStereotype",
+                    "TransactionTemplateService",
+                    "TransactionManagerService",
+                ),
             badRules.noCoreIo to listOf("IoDomain", "BadService", "java.io.File", "java.net.Socket", "java.sql.Connection"),
             badRules.independentPorts to listOf("BadInput", "BadOutput"),
             badRules.inboundBoundary to listOf("BadController"),

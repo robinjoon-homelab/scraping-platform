@@ -1,31 +1,62 @@
-# Kotlin · Spring Boot · Exposed 템플릿
+# Scraping Platform
 
-JDK 25, Kotlin 2.3.21, Spring Boot 4.1.1, Exposed 1.5.0을 사용하는 헥사고날 아키텍처 템플릿이다. 테스트로 REST Docs를 만들고 빌드 전에 ktlint로 스타일을 자동 수정하며 detekt·ArchUnit으로 코드 품질과 의존 경계를 검사한다.
+주식·경제·시사·개발 등 다양한 분야의 온라인 데이터를 주기적으로 모아 개인 DB에 보관하기 위한 Kotlin 백엔드다. 분야를 enum으로 고정하지 않고 **출처, 수집 대상·범위, 일정, 실행, 수집 결과**를 나눈다.
 
-## 로컬 실행
+현재는 **수집 설정을 관리하는 실행 가능한 초기 뼈대**다. 출처·계획 API와 DB 저장, 일정 계산, 실행 상태·레코드·체크포인트의 도메인 규칙을 구현했다. **실제 외부 요청, 주기 실행 워커, 실행 이력·수집 결과 저장은 아직 구현하지 않았다. `enabled=true`로 바꿔도 수집은 시작되지 않는다.** `HTTP_JSON`, `RSS_ATOM`, `HTML`은 설정 분류이며 동작하는 수집기 목록이 아니다.
 
-JDK 25를 설치하고 `JAVA_HOME`을 설정한다. Gradle은 저장소의 Wrapper를 사용한다.
+설계와 근거는 [도메인 모델](docs/domain-model.md), [공식 사례 조사와 분야별 설정 예시](docs/collection-research.md)에 정리했다.
+
+## 실행
+
+JDK 25와 저장소의 Gradle Wrapper를 사용한다. 기본 H2 파일 DB와 Flyway 덕분에 별도 DB나 Docker 없이 시작한다.
 
 ```sh
 java -version
+export SCRAPING_API_TOKEN="$(openssl rand -hex 32)"
 ./gradlew bootRun
 ```
 
-기본 주소는 `http://localhost:8080`이다. H2 파일 DB를 `./data/application`에 자동 생성하고 Flyway로 스키마를 적용하므로 별도 DB나 Docker 없이 실행할 수 있다.
+관리 API는 단일 운영자용이며 모든 `/api` 요청에 `Authorization: Bearer <토큰>`이 필요하다. 토큰을 설정하지 않으면 API는 `503`, 누락·불일치는 `401`을 반환한다. 토큰을 파일에 커밋하거나 공유하지 않는다. 운영에서는 HTTPS와 비밀 저장소를 사용한다. 사용자별 데이터 분리·다중 사용자 권한은 제공하지 않는다.
 
 ```sh
-curl -i http://localhost:8080/api/todos \
+curl -i http://localhost:8080/api/sources \
+  -H "Authorization: Bearer $SCRAPING_API_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"title":"첫 기능 만들기"}'
+  -d '{"name":"GitHub","kind":"HTTP_JSON","baseUrl":"https://api.github.com","credentialRef":"github-personal"}'
 
-curl http://localhost:8080/api/todos
+curl http://localhost:8080/api/sources \
+  -H "Authorization: Bearer $SCRAPING_API_TOKEN"
 ```
 
-Todo 생성·조회·목록·완료 API가 포트와 어댑터의 사용 예제를 제공한다. **예제 API에는 인증·인가가 없다. 공개 배포에서는 샘플 데이터만 사용하고 실제 서비스에는 접근 제어를 추가한다.**
+응답의 `id`를 아래 `sourceId`에 넣으면 특정 저장소의 릴리스를 매시간 수집할 계획을 등록한다. 출처의 `baseUrl`에 대상의 `resource` 경로와 `parameters`를 조합하는 계약이다. `credentialRef`는 미래 수집기가 비밀 저장소에서 해결할 참조 이름이며 현재는 저장만 한다. 실제 API 키를 URL이나 parameters에 넣지 않는다.
 
-## 테스트·코드 품질·API 문서
+```json
+{
+  "name": "Kotlin 릴리스",
+  "sourceId": "생성된-출처-UUID",
+  "target": {
+    "resource": "/repos/JetBrains/kotlin/releases",
+    "parameters": {"per_page": "100"}
+  },
+  "schedule": {
+    "everySeconds": 3600,
+    "anchorAt": "2026-10-05T00:00:00Z"
+  }
+}
+```
 
-**JDK 25와 저장소의 Gradle Wrapper만 필요하다.** 빌드·테스트·코드 품질 검사는 Python 없이 실행한다.
+`POST /api/collection-tasks`에 위 JSON을 전송한다. 새 계획은 `enabled=false`, `version=0`이다.
+
+## 관리 API
+
+- 출처: `POST /api/sources`, `GET /api/sources`, `GET /api/sources/{id}`. 출처는 이번 단계에서 생성 후 불변이다.
+- 계획: `POST /api/collection-tasks`, `GET /api/collection-tasks`, `GET /api/collection-tasks/{id}`.
+- 계획 수정: `PUT /api/collection-tasks/{id}`에 `{"expectedVersion":0,"definition":{...}}`을 전송한다.
+- 활성 설정: `PATCH /api/collection-tasks/{id}/enabled`에 `{"expectedVersion":0,"enabled":true}`를 전송한다. 매 수정마다 version이 증가하며 오래된 version은 `409`로 거부한다.
+
+목록은 `?offset=0&limit=50`이며 limit은 **1~100**이다. 고정 간격은 **60~31,536,000초**, 기준 시각은 UTC다. cron·시간대·누락 실행 재처리는 후속 범위다. 잘못된 설정은 `400`, 없는 리소스는 `404`로 응답한다. 삭제 API는 제공하지 않는다.
+
+## 검증과 API 문서
 
 ```sh
 ./gradlew test
@@ -33,52 +64,38 @@ Todo 생성·조회·목록·완료 API가 포트와 어댑터의 사용 예제�
 java -jar build/libs/application.jar
 ```
 
-- `test`와 `build` 전에 ktlint 자동 수정·검사와 타입 분석을 사용하는 `detektMain`, `detektTest`를 실행한다. 자동 수정된 소스는 `git diff`로 확인한다. 남은 위반은 빌드를 실패시키며 CI는 자동 수정이 발생해도 실패한다.
-- 운영 함수 30줄, 일반 함수 인자 4개·생성자 6개, 제어 흐름 중첩 2단계·스코프 함수 1단계, 인지 복잡도 10을 기본으로 검사한다. 테스트·승인된 DSL 함수 80줄 등 정확한 예외와 검사 방법은 [코드 품질 규칙](docs/code-quality.md)을 따른다.
-- API 통합 테스트는 실제 H2 DB와 Flyway를 사용하며 REST Docs 스니펫을 생성한다. 도메인·유스케이스·아키텍처 경계도 검사한다.
-- `build`는 테스트 결과로 HTML 문서를 만들고 실행 JAR에 포함한다. JAR 실행 후 [API 문서](http://localhost:8080/docs/index.html)를 연다.
-- 기본 실행과 테스트에는 Docker가 필요하지 않다. PostgreSQL 운영 설정은 [배포 가이드](docs/deployment.md)를 참고한다.
+`build`는 ktlint 자동 수정·검사, 타입 분석 detekt, 사용자 정의 규칙 테스트, 도메인·서비스·DB·API·아키텍처 검증과 REST Docs 생성을 실행한다. 실행 후 `git diff`로 포맷 변경을 확인한다. 애플리케이션 빌드에는 Python이 필요하지 않다.
 
-API 문서는 테스트에서 생성하는 요청·응답 필드와 예제를 사용한다. 문서 원문은 `src/docs/asciidoc/index.adoc`, 생성 스니펫은 `build/generated-snippets`, HTML은 `build/docs/asciidoc/index.html`에 있다. `bootRun`은 API 개발용이며 생성 문서 확인에는 위의 JAR 실행 명령을 사용한다.
+빌드한 JAR를 실행하면 [API 문서](http://localhost:8080/docs/index.html)를 볼 수 있다. 문서와 `/actuator/health`는 공개된다. `bootRun`에서는 문서 생성 결과가 패키징되지 않는다. 기본 DB 테스트는 H2 PostgreSQL 모드에서 수행한다. 실제 PostgreSQL 트랜잭션 검증은 [개발 가이드](docs/development.md#실제-postgresql-검증)의 별도 실행 방법을 따른다.
 
-## 프로젝트 구조
+## 구조와 다음 구현
+
+의존 방향은 `adapter → application → domain`이다. 도메인과 포트는 Spring·Exposed·HTTP 타입을 참조하지 않는다. 서비스는 클래스의 `@Transactional(readOnly = true)`와 쓰기 메서드의 `@Transactional`로 업무 경계를 선언한다. Exposed Spring Boot 4 스타터의 단일 트랜잭션 매니저를 사용하며 저장소 DSL은 서비스 트랜잭션에 참여한다. 빈은 `@Bean`으로 조립하고 JDBC 기반 MVC를 가상 스레드로 실행한다.
+
+템플릿 기준은 2026-10-08 원격에서 확인한 `ddfbfef26e7af1ab3ee3fc4f00bc137fdb0a4a87`이다. 적용 범위와 프로젝트 고유 차이는 [개발 가이드](docs/development.md#템플릿-적용-기준과-차이)에 기록한다.
+
+아키텍처 검사는 2026-10-09 로컬 공통 계약을 추가 반영해 계층 우선·기능 우선 패키지를 모두 지원한다. 현재 앱 구조는 유지하며 역할 경로·기능·어댑터 그룹의 경계를 검사한다. 앱 컨테이너의 힙과 OOM 동작은 JVM 기본값을 사용하고 Gradle 빌드 설정은 유지한다.
 
 ```text
 src/main/kotlin/com/example/template/
-├── domain/                    # 순수 Kotlin 모델·규칙
-├── application/
-│   ├── port/input/            # 유스케이스 계약
-│   ├── port/output/           # 외부 의존성 계약
-│   └── service/               # 유스케이스 구현
-├── adapter/
-│   ├── inbound/web/           # HTTP 입출력
-│   └── outbound/persistence/  # Exposed JDBC 저장소
-└── config/                    # Spring 빈 조립
-src/main/resources/db/migration/ # Flyway 마이그레이션
-src/test/                      # 단위·통합·아키텍처 테스트
-src/docs/asciidoc/              # REST Docs 원문
-quality-rules/                 # 빌드 전용 detekt 확장 규칙
-.github/workflows/             # PR 검사와 배포
+├── domain/                      # 출처·계획·고정 간격 규칙
+│   └── collection/              # 실행·레코드·체크포인트·배치 규칙
+├── application/port/input/      # 관리 유스케이스
+├── application/port/output/     # 설정 저장소·수집기 계약
+├── application/service/         # 관리 서비스
+├── adapter/inbound/web/         # 인증·검증·HTTP 계약
+├── adapter/outbound/persistence/# Exposed 저장소
+└── config/                      # 조립·DB·운영자 토큰 설정
 ```
 
-의존 방향은 `adapter → application → domain`이다. 도메인과 유스케이스는 Spring·Exposed·HTTP 타입을 알지 못한다. JDBC 기반 MVC에 가상 스레드를 활성화하고 정상 종료, 상태 확인, 운영용 PostgreSQL 프로필을 제공한다.
+다음 구현은 허용된 출처의 수집기 하나와 실행 워커다. 실행 선점, 원본·레코드·체크포인트의 원자적 저장, 중복 방지, 속도 제한·재시도·SSRF 방어를 함께 검증해야 한다. [도메인 모델의 후속 완료 조건](docs/domain-model.md#다음-구현의-완료-조건)을 따른다.
 
-`quality-rules`는 중첩 깊이, 변경 가능한 컬렉션 노출, 함수 80줄 상한을 검사하는 detekt 플러그인이다. detekt가 분석 전에 규칙 JAR를 읽을 수 있도록 별도 Gradle 모듈로 컴파일한다. 애플리케이션 계층을 나눈 모듈이 아니며 실행 JAR에는 포함하지 않는다. [검사 범위](docs/code-quality.md#검사-도구와-실행)를 참고한다.
+기존 Todo 예제 API는 제거했다. 배포된 DB와의 호환성을 위해 `V1__create_todos.sql`과 기존 테이블은 보존하고 새 설정 테이블은 V2에서 추가한다. 기존 패키지명은 아키텍처 검사와 함께 유지한다.
 
-## GitHub 템플릿으로 사용
+[개발 가이드](docs/development.md) · [코드 품질 규칙](docs/code-quality.md) · [배포 계약](docs/deployment.md) · [에이전트 지침](AGENTS.md)
 
-1. [Use this template](https://github.com/robinjoon-homelab/kotlin-springboot-exposed-template/generate)을 열고 새 저장소를 만든다. 홈랩 조직에서 사용할 때는 **Owner를 `robinjoon-homelab`**으로 선택한다.
-2. 생성한 저장소를 로컬에 복제한다. 원본은 이미 GitHub 템플릿이므로 별도로 템플릿 설정을 켤 필요가 없다.
-3. 필요하면 패키지, 프로젝트 이름, Todo 예제를 서비스에 맞게 변경한다. 변경 후 `./gradlew build`를 실행한다.
-4. `.github/CODEOWNERS`를 실제 담당자로 바꾸고, 병합 보호를 적용하려면 최초 푸시·CI 통과 후 `.github/rulesets/main-master.json`을 GitHub에 가져온다. 파일만으로 병합 차단이 적용되지 않으며, 이 정책은 승인 1개를 요구하므로 1인 저장소도 별도 승인자가 필요하다. [설정 절차](docs/code-quality.md#github에서-병합-차단-활성화)를 따른다.
+## 홈랩 배포 설정
 
-이 공개 템플릿의 원본 저장소는 CI 검증만 실행하고 배포하지 않는다. 워크플로가 GitHub의 `is_template` 설정을 확인하므로, **생성한 서비스 저장소는 Template repository 설정을 켜지 않는다.**
+배포 대상 이름은 `scraping-platform`으로 고정한다. GitHub Variables에 `HOMELAB_REGISTRY_HOST=registry.homelab.robinjoon.xyz`, `HOMELAB_REGISTRY_IMAGE=apps/scraping-platform`을 준비한다. 최초 생성은 `.github/deployment.json`의 DB·도메인·환경변수를 사용하고, 기존 대상이 있으면 이미지 태그만 갱신한다.
 
-PR 검사는 **PR 소스 저장소의 head 커밋**을 체크아웃해 실행한다. 템플릿에서 생성한 서비스 저장소의 `main` 또는 `master`에 푸시되면 검증 후 이미지를 빌드하고 홈랩에 배포한다. **저장소별 Secrets/Variables 입력은 필요 없지만, 새 저장소의 SMS 허용 목록 등록은 플랫폼 운영자가 먼저 완료해야 한다.** 이름 생성 규칙과 전체 사전조건은 [배포 가이드](docs/deployment.md)에 있다.
-
-## 개발과 AI 에이전트
-
-- [개발 가이드](docs/development.md): 기능 추가, API 문서 갱신, DB 마이그레이션, 검증 명령.
-- [코드 품질 규칙](docs/code-quality.md): 함수·이름·문법 제한, 예외 절차, 정적 분석과 GitHub 병합 차단.
-- [배포 가이드](docs/deployment.md): PR 정책, SMS, 컨테이너, 하네스 연동.
-- [AGENTS.md](AGENTS.md): AI 에이전트 공통 지침. Claude와 Copilot용 진입 문서도 포함한다.
+최초 실행에는 별도로 준비한 runtime Secret **`scraping-platform-runtime`의 `api-token` key**가 필요하다. 이 참조로 `SCRAPING_API_TOKEN`을 주입하며 비밀 값은 코드에 넣지 않는다. 실제 배포·Secret 준비·워크로드 존재 검증의 범위와 절차는 [배포 가이드](docs/deployment.md)를 따른다.

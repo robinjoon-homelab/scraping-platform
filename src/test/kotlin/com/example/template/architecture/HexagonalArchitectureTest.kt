@@ -18,8 +18,9 @@ class HexagonalArchitectureTest {
     @Test
     fun `production class scan is nonempty and excludes test fixtures`() {
         assertThat(productionClasses.map { it.name })
-            .contains("com.example.template.TemplateApplication", "com.example.template.domain.Todo")
-            .noneMatch { it.contains(".architecture.") }
+            .contains("com.example.template.TemplateApplication", "com.example.template.domain.CollectionTask")
+            .doesNotContain(ArchitectureRules::class.java.name, HexagonalArchitectureTest::class.java.name)
+            .noneMatch { it.startsWith("architecturefixtures.") }
     }
 
     companion object {

@@ -9,7 +9,7 @@
 - 일반 함수는 매개변수 최대 **4개**, 일반 생성자는 최대 **6개**다. 기본값이 있는 인자도 센다. DTO·설정 객체의 생성자는 사유를 승인한 개별 선언만 예외로 둔다. 외부 계약의 `override`는 detekt가 인자 제한에서 제외하므로 실제 계약에 필요한 예외인지 리뷰한다. `ignoreDataClasses=false`로 모든 `data class`를 일괄 면제하지 않는다.
 - `if`, `when`, `for`·`while`·`do/while`의 통합 중첩은 최대 **2단계**다. Kotlin 컬렉션·시퀀스의 `forEach`·`forEachIndexed`도 타입 분석으로 식별하여 반복문처럼 1단계로 센다. 이름만 같은 사용자 정의 DSL은 반복문으로 취급하지 않는다.
 - `if → for`는 허용하지만 그 안에 `if`를 더하면 실패한다. `else if`는 같은 깊이로 계산하고 지역 함수는 별도 함수로 다시 센다. `try`·`catch`·`finally` 래퍼 자체는 깊이에 더하지 않으며 내부 제어 흐름은 검사한다.
-- `transaction { ... }` 같은 DSL과 `map`·`flatMap` 변환 함수의 람다 래퍼는 깊이에 더하지 않는다. 사용자 정의 규칙은 모든 람다 본문을 순회하므로 그 내부의 분기·반복도 검사한다. 복잡한 컬렉션 변환 연결은 리뷰한다.
+- `buildList { ... }` 같은 DSL과 `map`·`flatMap` 변환 함수의 람다 래퍼는 깊이에 더하지 않는다. 사용자 정의 규칙은 모든 람다 본문을 순회하므로 그 내부의 분기·반복도 검사한다. 복잡한 컬렉션 변환 연결은 리뷰한다.
 - `let`, `apply`, `run`, `also`, `with` 스코프 함수는 최대 **1단계**다. 다른 스코프 함수 안에 중첩하지 않는다.
 - 함수의 인지 복잡도는 최대 **10**이다. 함수를 분리할 때 이름만 바꾸거나 인자를 임의 객체로 포장해 제한을 우회하지 않는다.
 
@@ -20,7 +20,7 @@ detekt `LongMethod`는 중첩된 지역 함수의 본문을 바깥 함수의 30�
 ## 이름과 표현
 
 - 클래스는 `PascalCase`, 함수·변수는 `camelCase`, 패키지는 소문자, 상수는 `UPPER_SNAKE_CASE`를 쓴다.
-- 웹 컨트롤러는 `*Controller`로 이름 짓고 웹 어댑터에 둔다. 저장소 구현은 저장소 어댑터에 둔다. 역할과 위치는 아키텍처 테스트로 검사한다.
+- 웹 컨트롤러는 `*Controller`로 이름 짓고 입력 어댑터에 둔다. 출력 포트 구현은 역할 경로가 일치하는 출력 어댑터에 둔다. 역할과 위치는 아키텍처 테스트로 검사한다.
 - `id`, `url`, 짧은 반복문의 `i`, 타입 매개변수 `T`를 허용한다. 이름 길이에 일률적인 최솟값·최댓값을 두지 않는다.
 - JUnit의 `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate` 함수에는 한글·공백 포함 백틱 이름을 허용하며 공백 없는 한글 이름도 허용한다. 테스트 파일의 일반 보조 함수나 운영 함수로 명명 예외를 확대하지 않는다.
 - 이름은 업무 의미와 책임을 드러낸다. `Manager`, `Helper`, `Utils`, `Impl`은 더 구체적인 이름을 검토하는 신호이며 무조건 금지하는 접미사가 아니다.
@@ -44,20 +44,40 @@ detekt `LongMethod`는 중첩된 지역 함수의 본문을 바깥 함수의 30�
 
 ## Spring과 헥사고날 경계
 
-의존 방향은 `adapter → application → domain`이다. 순수 Kotlin 도메인과 애플리케이션은 Spring, Exposed, HTTP, JDBC, 파일·네트워크 I/O를 직접 참조하지 않는다. 기술 작업은 출력 포트를 통해 요청하고 어댑터에서 실행한다.
+의존 방향은 `adapter → application → domain`이다. 도메인과 포트는 순수 Kotlin으로 유지하며 Spring·Exposed·HTTP에 의존하지 않는다. `application/service`의 Spring 의존성은 `org.springframework.transaction.annotation`의 **`Transactional`과 선언 옵션 타입 `Propagation`·`Isolation` 세 타입만 허용**한다. JDBC·파일·네트워크 I/O는 출력 포트를 통해 요청하고 어댑터에서 실행한다.
 
 - 운영 코드의 의존성 주입은 생성자로 한다. 필드·세터의 `@Autowired`, `@Inject`, `@Resource`, `@Value` 주입은 아키텍처 테스트로 차단한다. 생성자로 받은 의존성을 `private val`로 보관하는지는 코드 리뷰에서도 확인한다. Spring 테스트의 프레임워크 주입은 운영 코드 규칙과 구분한다.
 - 포트는 계약이며 서비스 구현을 참조하지 않는다. 어댑터는 대응하는 포트를 구현하거나 입력 포트를 호출한다. 어댑터 간 직접 의존을 만들지 않는다.
+- 유스케이스 구현에 `@Service`·`@Component`, `TransactionTemplate`·트랜잭션 매니저를 추가하지 않는다. 빈은 `config`의 `@Bean`으로 조립하고 트랜잭션은 Exposed Spring Boot 4 스타터의 매니저로 실행한다.
+- 모든 입력·출력 어댑터의 클래스·메서드에 `@Transactional`을 선언하지 않는다. ArchUnit은 직접 선언, 합성 애너테이션, 상위 클래스·인터페이스의 선언까지 검사한다. 어댑터의 `TransactionManager`·`TransactionOperations`·`TransactionAspectSupport` 의존과 저장소의 Exposed `transactions` 패키지 의존도 금지한다. 모든 어댑터에서 JDBC `Connection`과 Exposed `ExposedConnection`의 `commit`·`rollback`·`setAutoCommit`·`setSavepoint`·`releaseSavepoint`·`setTransactionIsolation`·`setReadOnly`, Exposed `Transaction`의 직접 `commit`·`rollback` 호출과 메서드 참조도 차단한다. 트랜잭션의 연결이나 데이터베이스 커넥터를 경유하는 경우도 검사하며, 일반 JDBC·Exposed 조회는 허용한다. 트랜잭션 애너테이션 검사는 현재 스택의 Spring `org.springframework.transaction.annotation.Transactional`을 대상으로 한다. JTA를 도입할 때는 `jakarta.transaction.Transactional`·`javax.transaction.Transactional` 탐지와 직접·합성·상속 회귀 사례를 공통 계약에 먼저 추가한다.
 - Exposed `Table`, `Query`, `ResultRow` 등의 타입을 포트·도메인·웹 요청/응답에 노출하지 않는다. 기술 설정을 위한 `config`의 의존과 저장소 어댑터 내부 사용은 허용한다.
 - 새 운영 클래스를 검사 대상 패키지 밖에 두어 검사를 피하지 않는다. 엔트리포인트, 설정, 허용된 계층 중 어느 곳에 속하는지 아키텍처 테스트가 확인한다.
 
-아키텍처 검사는 Gradle이 전달한 전체 운영 클래스 출력 경로를 읽는다. 포트 패키지에서 `*UseCase`, `*Repository`, `*Port` 역할의 타입은 인터페이스로 선언한다. `Command`·`Result` 같은 데이터 계약과 입력 포트의 예외 타입은 허용하며 순수성·불변성 규칙은 유지한다. Kotlin이 생성한 companion·기본 구현 보조 클래스는 일반 구현과 구분한다. 포트 간 계약 참조는 허용하되 서비스·어댑터·설정 참조는 막는다.
+아키텍처 검사는 Gradle이 전달한 전체 운영 클래스 출력 경로를 읽는다. 포트 패키지의 `UseCase`·`Repository`·`Port`·`Source`·`Catalog`·`Reporter`·`Gateway`·`Verifier`·`Store`·`Lookup`·`Classifier` 접미사는 인터페이스 역할을 나타낸다. `Command`·`Result` 같은 데이터 계약과 입력 포트의 예외 타입은 허용하며 순수성·불변성 규칙은 유지한다. Kotlin이 생성한 companion·기본 구현 보조 클래스는 일반 구현과 구분한다. 포트 간 계약 참조는 허용하되 서비스·어댑터·설정 참조는 막는다. `application.model`은 언어 기본 타입·도메인·다른 모델만 참조한다.
 
-`@Configuration`은 `config`의 `*Config`, `@Controller`·`@RestController`와 합성 컨트롤러 애너테이션은 웹 어댑터의 `*Controller`에 둔다. 저장소 구현과 출력 포트 구현은 이름의 접미사와 관계없이 저장소 어댑터에 둔다. 패키지 간 순환 의존도 검사한다.
+`@Configuration`은 `config`의 `*Config`, `@Controller`·`@RestController`와 합성 컨트롤러 애너테이션은 입력 어댑터의 `*Controller`에 둔다. 입력 포트 구현은 역할이 일치하는 애플리케이션 서비스에, 출력 포트 구현과 `*Repository` 구현은 역할이 일치하는 출력 어댑터에 둔다. 보조 서비스에는 포트 구현을 강제하지 않는다. Exposed·Spring JDBC·`java.sql`·`javax.sql` 의존은 출력 어댑터의 `persistence` 경로 아래와 `config`에만 허용한다. 패키지 간 순환 의존도 검사한다.
 
-도메인·애플리케이션에서는 `java.io`(`Serializable` 제외), `java.sql`, `javax.sql`, `java.net`, `java.nio.file`, `java.nio.channels`, `kotlin.io` 의존을 금지한다. JVM 기본 타입 전체를 허용한다는 이유로 외부 I/O가 통과하지 않도록 별도로 검사한다.
+도메인·애플리케이션에서는 `java.io`, `java.sql`, `javax.sql`, `java.net`, `java.nio.file`, `java.nio.channels`, `java.rmi`, `java.util.prefs`, `kotlin.io` 의존을 금지한다. 외부 프로세스 I/O를 제공하는 `Process`·`ProcessBuilder`·`ProcessHandle`·`Runtime`도 금지한다. 순수 계약인 `java.io.Serializable`과 주소 값인 `java.net.URI`만 예외로 허용한다. URL·Socket·네트워크 클라이언트·파일·JDBC는 계속 금지한다.
 
-여러 저장소 변경이 하나의 업무라면 트랜잭션 경계를 먼저 설계하고 **중간 실패 시 전체 롤백되는 통합 테스트**를 추가한다. 저장소 메서드별 트랜잭션이나 순차 호출만으로 여러 변경의 원자성이 보장되지 않는다. 현재 단순 예제를 위해 사용하지 않는 트랜잭션 추상화를 미리 추가하지 않는다.
+여러 저장소 변경이 하나의 업무라면 유스케이스의 `@Transactional` 안에 두고 **실제 커밋·중간 실패 시 전체 롤백을 통합 테스트**한다. 저장소 어댑터는 별도 `transaction {}` 없이 현재 트랜잭션에 참여한다. 테스트의 자동 롤백이나 모의 저장소만으로 원자성을 주장하지 않으며, 공통 트랜잭션 추상화·데코레이터를 추가하지 않는다. 프록시·읽기 전용·롤백 조건은 [개발 가이드](development.md#트랜잭션)를 따른다.
+
+### 하위 패키지와 기능 경계
+
+`ArchitecturePackages`는 `<root>.[feature...].<layer>.[role/implementation...]`을 해석한다. `domain`, `application`, `adapter`, `config` 중 첫 세그먼트가 계층 시작이며 기능 이름으로 예약된다. 계층은 `domain`, `application.model`, `application.port.input`, `application.port.output`, `application.service`, `adapter.inbound`, `adapter.outbound`, `config`다. 어댑터에는 최소 한 단계의 그룹 이름이 필요하다. 계층 우선과 기능 우선 구조를 함께 사용할 수 있다.
+
+| 포트 | 허용되는 구현 예 |
+| --- | --- |
+| `application.port.output.payment.refund` | `adapter.outbound.stripe.payment.refund` 또는 `adapter.outbound.payment.refund.stripe` |
+| `billing.orders.application.port.output.source` | `billing.orders.adapter.outbound.vendor.source` |
+| `billing.orders.application.port.input.query` | `billing.orders.application.service.query` |
+
+포트의 `input`·`output` 뒤 전체 역할 경로가 구현 경로에 **연속된 완전한 세그먼트**로 있어야 한다. `payment.refund`와 `billing.refund`, `payments.refund`, `payment.client.refund`는 다르다. 역할 하위 경로가 없는 포트는 같은 기능의 해당 구현 계층 어디에서나 구현할 수 있다. 루트 포트는 공용 계약이므로 기능별 구현에서도 사용할 수 있다. 기능 앞부분의 전체 경로를 비교하므로 `billing.orders`와 `shipping.orders`가 같은 기능으로 취급되지 않는다. 입력 어댑터는 자기 기능 또는 루트 공용 입력 포트만 참조할 수 있고, 이때도 전체 역할 경로가 일치해야 한다. 다른 기능의 입력 계약은 애플리케이션 서비스에서 호출한다.
+
+어댑터 격리 단위는 **기능 경로 + 입력/출력 방향 + 첫 그룹 이름**이다. `outbound.stripe.payment`와 `outbound.paypal.payment`는 서로 참조할 수 없다. `outbound.stripe.client`와 `outbound.stripe.mapping`은 같은 그룹의 내부 구현으로 함께 사용할 수 있다. `outbound.payment.stripe`와 `outbound.payment.paypal`은 `payment` 한 그룹이다. 공급자별 격리가 필요하면 공급자를 별도 첫 그룹으로 배치한다. 패키지의 임의 하위 이름을 보고 독립 공급자인지 보조 코드인지 추측하지 않는다.
+
+다른 기능의 입력 계약·도메인 값·애플리케이션 모델은 사용할 수 있다. 다른 기능의 서비스 구현·출력 포트·어댑터·설정은 직접 참조하지 않는다. 루트 공용 포트와 전체 구현을 조립하는 `config`는 이 기능 소유권 규칙의 명시적 예외이며, 계층 방향·순수성 규칙은 그대로 적용된다.
+
+공통 검사 코드는 앱 이름에 의존하지 않는다. `HexagonalArchitectureTest`에서 루트 패키지와 시작 클래스명을 전달한다. 기존에 적용된 Java 마이그레이션처럼 계층 밖에 보존해야 하는 클래스는 `additionalProductionTypes`에 정확한 FQCN만 명시하고 앱 문서와 별도 테스트에 근거를 남긴다. 목록에 등록되어 있고 Flyway `JavaMigration`을 실제로 구현한 클래스에는 `java.sql`·`javax.sql`도 허용한다. 등록하지 않은 마이그레이션과 일반 등록 클래스의 JDBC, 마이그레이션의 Exposed·Spring JDBC 의존은 허용하지 않는다. 이 목록은 다른 경계 검사를 끄지 않는다. `ArchitectureLayoutsTest`의 정상·위반 사례로 두 패키지 구조와 이 예외 범위를 함께 검증한다. 위반 사례는 해당 규칙이 `all()` 실행 목록에 포함되는지도 확인한다.
 
 ## 검사 도구와 실행
 

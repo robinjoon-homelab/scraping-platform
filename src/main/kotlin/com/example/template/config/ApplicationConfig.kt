@@ -1,8 +1,11 @@
 package com.example.template.config
 
-import com.example.template.application.port.input.TodoUseCase
-import com.example.template.application.port.output.TodoRepository
-import com.example.template.application.service.TodoService
+import com.example.template.application.port.input.CollectionTaskUseCase
+import com.example.template.application.port.input.SourceUseCase
+import com.example.template.application.port.output.CollectionTaskRepository
+import com.example.template.application.port.output.SourceRepository
+import com.example.template.application.service.CollectionTaskService
+import com.example.template.application.service.SourceService
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.time.Clock
@@ -13,8 +16,15 @@ class ApplicationConfig {
     fun clock(): Clock = Clock.systemUTC()
 
     @Bean
-    fun todoUseCase(
-        repository: TodoRepository,
+    fun sourceUseCase(
+        repository: SourceRepository,
         clock: Clock,
-    ): TodoUseCase = TodoService(repository, clock)
+    ): SourceUseCase = SourceService(repository, clock)
+
+    @Bean
+    fun collectionTaskUseCase(
+        repository: CollectionTaskRepository,
+        sources: SourceRepository,
+        clock: Clock,
+    ): CollectionTaskUseCase = CollectionTaskService(repository, sources, clock)
 }
