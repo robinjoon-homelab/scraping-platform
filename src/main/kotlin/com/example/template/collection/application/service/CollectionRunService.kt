@@ -1,6 +1,10 @@
 package com.example.template.collection.application.service
 
+import com.example.template.collection.application.port.output.CheckpointStore
+import com.example.template.collection.application.port.output.CollectedRecordStore
 import com.example.template.collection.application.port.output.CollectionRunRepository
+import com.example.template.collection.domain.run.CollectionBatch
+import com.example.template.collection.domain.run.CollectionRequest
 import com.example.template.collection.domain.run.CollectionRun
 import com.example.template.collection.domain.run.CollectionRunStatus
 import org.springframework.transaction.annotation.Transactional
@@ -12,6 +16,8 @@ import java.time.Instant
 @Transactional(readOnly = true)
 class CollectionRunService(
     private val runs: CollectionRunRepository,
+    private val records: CollectedRecordStore,
+    private val checkpoints: CheckpointStore,
 ) {
     fun findPending(
         now: Instant,
@@ -38,14 +44,29 @@ class CollectionRunService(
         reason: String,
     ): CollectionRun? = runs.update(run.start(now).fail(now, reason), CollectionRunStatus.PENDING)
 
-    // Takes the running run the worker stored, not the run a batch carries. The batch records and its candidate checkpoint
-    // are discarded by the worker: nothing stores them yet. Storing them belongs in this transaction, before the run
-    // succeeds, so that a run never succeeds without its records.
+    // Builds the request for a run the worker just started. The task's checkpoint is sent only when it was written for the
+    // run's task version: after a plan change the old cursor means nothing, so the source is collected from the start.
+    fun requestFor(running: CollectionRun): CollectionRequest =
+        CollectionRequest(running, checkpoints.find(running.task.taskId)?.takeIf { it.taskVersion == running.task.version })
+
+    // Takes the running run the worker stored, not the run a batch carries. The run is closed first, as a conditional
+    // update, and only the worker that closed it stores the batch: a null result (the lease expired and the run was closed
+    // already) stores nothing, and the update's row lock keeps the lease expiry from closing the run while its records are
+    // written. Records and checkpoint share this transaction with the update, so a store failure rolls the success back and
+    // the run stays RUNNING until its lease expires; the checkpoint moves only together with the records it covers. A null
+    // candidate checkpoint leaves the stored one unchanged.
     @Transactional
     fun complete(
         run: CollectionRun,
+        batch: CollectionBatch,
         now: Instant,
-    ): CollectionRun? = runs.update(run.succeed(now), CollectionRunStatus.RUNNING)
+    ): CollectionRun? {
+        require(batch.request.run.id == run.id) { "batch must belong to the run being completed" }
+        val closed = runs.update(run.succeed(now), CollectionRunStatus.RUNNING) ?: return null
+        records.saveNew(batch.records)
+        batch.nextCheckpoint?.let { checkpoints.save(it, run.id, now) }
+        return closed
+    }
 
     @Transactional
     fun fail(

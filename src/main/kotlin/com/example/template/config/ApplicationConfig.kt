@@ -4,6 +4,8 @@ import com.example.template.collection.application.port.input.CollectionScheduli
 import com.example.template.collection.application.port.input.CollectionTaskUseCase
 import com.example.template.collection.application.port.input.CollectionWorkerUseCase
 import com.example.template.collection.application.port.input.SourceUseCase
+import com.example.template.collection.application.port.output.CheckpointStore
+import com.example.template.collection.application.port.output.CollectedRecordStore
 import com.example.template.collection.application.port.output.CollectionConnectorPort
 import com.example.template.collection.application.port.output.CollectionRunRepository
 import com.example.template.collection.application.port.output.CollectionTaskRepository
@@ -52,7 +54,11 @@ class ApplicationConfig {
     ): CollectionSchedulingUseCase = CollectionSchedulingService(slots, clock)
 
     @Bean
-    fun collectionRunService(runs: CollectionRunRepository): CollectionRunService = CollectionRunService(runs)
+    fun collectionRunService(
+        runs: CollectionRunRepository,
+        records: CollectedRecordStore,
+        checkpoints: CheckpointStore,
+    ): CollectionRunService = CollectionRunService(runs, records, checkpoints)
 
     @Bean
     fun collectionWorkerUseCase(

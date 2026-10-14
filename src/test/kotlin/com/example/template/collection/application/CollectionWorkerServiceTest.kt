@@ -1,5 +1,7 @@
 package com.example.template.collection.application
 
+import com.example.template.collection.application.port.output.CheckpointStore
+import com.example.template.collection.application.port.output.CollectedRecordStore
 import com.example.template.collection.application.port.output.CollectionConnectorException
 import com.example.template.collection.application.port.output.CollectionConnectorPort
 import com.example.template.collection.application.port.output.CollectionRunRepository
@@ -45,6 +47,8 @@ class CollectionWorkerServiceTest {
     private val now = scheduledFor.plusSeconds(30)
     private val lease = Duration.ofMinutes(5)
     private val repository = mockk<CollectionRunRepository>()
+    private val records = mockk<CollectedRecordStore>()
+    private val checkpoints = mockk<CheckpointStore>()
     private val connector = mockk<CollectionConnectorPort>()
     private val logs = mutableListOf<String>()
     private val workerLog = Logger.getLogger(CollectionWorkerService::class.java.name)
@@ -61,6 +65,8 @@ class CollectionWorkerServiceTest {
 
     @BeforeEach
     fun captureLog() {
+        every { checkpoints.find(any()) } returns null
+        every { records.saveNew(any()) } returns 0
         workerLog.addHandler(logCapture)
     }
 
@@ -75,6 +81,21 @@ class CollectionWorkerServiceTest {
         every { repository.findPending(now, 10) } returns listOf(pending)
         acceptStart(pending)
         every { connector.collect(any()) } answers { CollectionBatch(firstArg(), emptyList()) }
+        acceptClose(pending, CollectionRunStatus.SUCCEEDED)
+
+        assertThat(worker().runPending(10)).isEqualTo(1)
+
+        assertThat(logOf(pending)).isEmpty()
+    }
+
+    @Test
+    fun `a stored checkpoint of the task version is sent to the connector and its batch succeeds`() {
+        val pending = pending()
+        val checkpoint = Checkpoint(pending.task.taskId, pending.task.version, "cursor-1")
+        every { repository.findPending(now, 10) } returns listOf(pending)
+        every { checkpoints.find(pending.task.taskId) } returns checkpoint
+        acceptStart(pending)
+        every { connector.collect(match { it.checkpoint == checkpoint }) } answers { CollectionBatch(firstArg(), emptyList()) }
         acceptClose(pending, CollectionRunStatus.SUCCEEDED)
 
         assertThat(worker().runPending(10)).isEqualTo(1)
@@ -276,12 +297,17 @@ class CollectionWorkerServiceTest {
     @Test
     fun `a lease must last some time`() {
         assertThatThrownBy {
-            CollectionWorkerService(CollectionRunService(repository), connector, Clock.fixed(now, ZoneOffset.UTC), Duration.ZERO)
+            CollectionWorkerService(
+                CollectionRunService(repository, records, checkpoints),
+                connector,
+                Clock.fixed(now, ZoneOffset.UTC),
+                Duration.ZERO,
+            )
         }.isInstanceOf(IllegalArgumentException::class.java)
     }
 
     private fun worker(at: Instant = now): CollectionWorkerService =
-        CollectionWorkerService(CollectionRunService(repository), connector, Clock.fixed(at, ZoneOffset.UTC), lease)
+        CollectionWorkerService(CollectionRunService(repository, records, checkpoints), connector, Clock.fixed(at, ZoneOffset.UTC), lease)
 
     private fun logOf(run: CollectionRun): List<String> = logs.filter { run.id.toString() in it }
 

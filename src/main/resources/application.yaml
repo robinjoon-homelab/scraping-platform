@@ -7,7 +7,7 @@ spring:
   main:
     keep-alive: true
   datasource:
-    url: ${DB_URL:jdbc:h2:file:./data/application;DB_CLOSE_ON_EXIT=FALSE}
+    url: ${DB_URL:jdbc:h2:file:./data/application;MODE=PostgreSQL;DB_CLOSE_ON_EXIT=FALSE}
     username: ${DB_USERNAME:sa}
     password: ${DB_PASSWORD:}
     driver-class-name: ${DB_DRIVER:org.h2.Driver}

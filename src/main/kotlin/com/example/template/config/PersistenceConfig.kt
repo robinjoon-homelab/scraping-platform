@@ -1,8 +1,12 @@
 package com.example.template.config
 
+import com.example.template.collection.adapter.outbound.persistence.ExposedCheckpointStore
+import com.example.template.collection.adapter.outbound.persistence.ExposedCollectedRecordStore
 import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionRunRepository
 import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionTaskRepository
 import com.example.template.collection.adapter.outbound.persistence.ExposedSourceRepository
+import com.example.template.collection.application.port.output.CheckpointStore
+import com.example.template.collection.application.port.output.CollectedRecordStore
 import com.example.template.collection.application.port.output.CollectionRunRepository
 import com.example.template.collection.application.port.output.CollectionTaskRepository
 import com.example.template.collection.application.port.output.SourceRepository
@@ -20,4 +24,10 @@ class PersistenceConfig {
 
     @Bean
     fun collectionRunRepository(jsonMapper: JsonMapper): CollectionRunRepository = ExposedCollectionRunRepository(jsonMapper)
+
+    @Bean
+    fun collectedRecordStore(): CollectedRecordStore = ExposedCollectedRecordStore()
+
+    @Bean
+    fun checkpointStore(): CheckpointStore = ExposedCheckpointStore()
 }
