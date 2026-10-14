@@ -4,6 +4,7 @@ import com.example.template.collection.application.port.input.CollectionWorkerUs
 import com.example.template.collection.application.port.output.CollectionConnectorException
 import com.example.template.collection.application.port.output.CollectionConnectorPort
 import com.example.template.collection.domain.InvalidCollectionConfigurationException
+import com.example.template.collection.domain.run.CollectionBatch
 import com.example.template.collection.domain.run.CollectionRequest
 import com.example.template.collection.domain.run.CollectionRun
 import com.example.template.collection.domain.run.MAX_FAILURE_LENGTH
@@ -53,9 +54,13 @@ class CollectionWorkerService(
             return runs.refuse(pending, now, CREDENTIAL_UNSUPPORTED) != null
         }
         val running = runs.start(pending, now, now.plus(leaseDuration)) ?: return false
-        val failure = collect(running)
+        val outcome = collect(runs.requestFor(running))
         val finishedAt = Instant.now(clock)
-        val closed = if (failure == null) runs.complete(running, finishedAt) else runs.fail(running, finishedAt, failure)
+        val closed =
+            when (outcome) {
+                is Outcome.Collected -> runs.complete(running, outcome.batch, finishedAt)
+                is Outcome.Failed -> runs.fail(running, finishedAt, outcome.reason)
+            }
         if (closed == null) {
             logger.log(System.Logger.Level.WARNING, "Discarded the result of collection run ${running.id} closed before it finished")
         } else if (closed.failureReason != null) {
@@ -64,16 +69,16 @@ class CollectionWorkerService(
         return true
     }
 
-    // Returns the failure reason, or null when the connector returned a batch for exactly the request it was given.
+    // Returns the batch, or the failure reason when the connector failed or returned a batch for another request.
     // runCatching turns every connector exception into a run failure. JVM errors and interruption are not failures of
     // the source, so they are rethrown and the lease expiry closes the run instead.
-    private fun collect(running: CollectionRun): String? {
-        val request = CollectionRequest(running)
+    private fun collect(request: CollectionRequest): Outcome {
         val result = runCatching { connector.collect(request) }
         val failure = result.exceptionOrNull()
         if (failure is Error || failure is InterruptedException) throw failure
-        if (failure != null) return failureReason(failure)
-        return if (isSameRequest(request, result.getOrThrow().request)) null else FOREIGN_BATCH
+        if (failure != null) return Outcome.Failed(failureReason(failure))
+        val batch = result.getOrThrow()
+        return if (isSameRequest(request, batch.request)) Outcome.Collected(batch) else Outcome.Failed(FOREIGN_BATCH)
     }
 
     // The batch invariants were checked against the request it carries, so that request must be the one sent. Comparing
@@ -117,6 +122,16 @@ class CollectionWorkerService(
 
     private fun validateLimit(limit: Int) =
         validateCollectionConfiguration(limit in 1..MAX_RUNS_PER_CALL, "Limit must be between 1 and $MAX_RUNS_PER_CALL")
+
+    private sealed interface Outcome {
+        class Collected(
+            val batch: CollectionBatch,
+        ) : Outcome
+
+        class Failed(
+            val reason: String,
+        ) : Outcome
+    }
 
     private companion object {
         const val MAX_RUNS_PER_CALL = 1000

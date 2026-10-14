@@ -5,7 +5,7 @@
 - `JAVA_HOME`을 JDK 25로 설정하고 저장소의 `./gradlew`를 사용한다. 전역 Gradle을 사용하지 않는다.
 - 의존성 변경 전 `build.gradle.kts`와 `gradle/wrapper/gradle-wrapper.properties`의 버전을 확인한다.
 - 로컬 API는 `http://localhost:8080`으로 호출하고 `Authorization: Bearer <SCRAPING_API_TOKEN>`을 보낸다. 토큰 미설정은 503, 누락·불일치는 401이며 문서·health는 공개다. H2 개발 DB를 초기화할 때는 앱을 종료하고 필요한 데이터를 백업한 뒤 `data/`를 삭제한다.
-- 기본 프로필의 DB 연결은 `DB_URL`·`DB_USERNAME`·`DB_PASSWORD` 또는 표준 `SPRING_DATASOURCE_URL`·`SPRING_DATASOURCE_USERNAME`·`SPRING_DATASOURCE_PASSWORD`로 지정한다. H2 외의 DB에는 `DB_DRIVER`도 설정한다.
+- 기본 프로필의 DB 연결은 `DB_URL`·`DB_USERNAME`·`DB_PASSWORD` 또는 표준 `SPRING_DATASOURCE_URL`·`SPRING_DATASOURCE_USERNAME`·`SPRING_DATASOURCE_PASSWORD`로 지정한다. H2 외의 DB에는 `DB_DRIVER`도 설정한다. 레코드·체크포인트 저장이 `ON CONFLICT DO NOTHING`을 쓰므로 H2는 기본 URL처럼 `MODE=PostgreSQL`로 연결해야 하며, 호환 모드가 없는 H2는 지원하지 않는다.
 - 운영 PostgreSQL에는 [배포 계약](deployment.md#컨테이너와-db-계약)의 `prod` 프로필을 사용한다. DB 파일·자격 증명을 커밋하지 않는다.
 
 ## 기능 변경
