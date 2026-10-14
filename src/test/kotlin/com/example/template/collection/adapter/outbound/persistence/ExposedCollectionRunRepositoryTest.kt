@@ -1,5 +1,6 @@
 package com.example.template.collection.adapter.outbound.persistence
 
+import com.example.template.collection.application.port.output.CollectionRunSlotTakenException
 import com.example.template.collection.domain.run.CollectionRun
 import com.example.template.collection.domain.run.CollectionRunStatus
 import com.example.template.collection.domain.run.SourceSnapshot
@@ -116,16 +117,28 @@ class ExposedCollectionRunRepositoryTest {
     }
 
     @Test
-    fun `a second run for the same task and scheduled time is rejected`() {
+    fun `a second run for the same task and scheduled time is rejected as a taken slot`() {
         val snapshot = seedSnapshot()
         val first = inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt)) }
 
         assertThatThrownBy { inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt)) } }
-            .isInstanceOf(Exception::class.java)
+            .isInstanceOf(CollectionRunSlotTakenException::class.java)
+            .hasMessageContaining(snapshot.taskId.toString())
 
         assertThat(inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt.plusSeconds(60))) }.id)
             .isNotEqualTo(first.id)
         assertThat(countRuns()).isEqualTo(2)
+    }
+
+    @Test
+    fun `slot existence matches the stored task and persisted scheduled time`() {
+        val snapshot = seedSnapshot()
+        inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt)) }
+
+        assertThat(inTransaction { repository.existsForSlot(snapshot.taskId, scheduledAt) }).isTrue()
+        assertThat(inTransaction { repository.existsForSlot(snapshot.taskId, Instant.parse("2026-10-05T00:00:00.123456Z")) }).isTrue()
+        assertThat(inTransaction { repository.existsForSlot(snapshot.taskId, scheduledAt.plusSeconds(60)) }).isFalse()
+        assertThat(inTransaction { repository.existsForSlot(UUID.randomUUID(), scheduledAt) }).isFalse()
     }
 
     private fun countRuns(leased: Boolean = false): Long =

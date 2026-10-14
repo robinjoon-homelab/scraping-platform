@@ -15,6 +15,7 @@ internal object CollectionTasksTable : Table("collection_tasks") {
     val enabled = bool("enabled")
     val version = long("version")
     val createdAt = timestampWithTimeZone("created_at")
+    val nextRunAt = timestampWithTimeZone("next_run_at").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

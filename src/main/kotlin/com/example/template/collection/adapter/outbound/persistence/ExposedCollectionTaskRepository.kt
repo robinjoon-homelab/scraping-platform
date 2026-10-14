@@ -6,16 +6,21 @@ import com.example.template.collection.domain.task.CollectionTask
 import com.example.template.collection.domain.task.IntervalSchedule
 import com.example.template.collection.domain.task.TaskDefinition
 import com.example.template.collection.domain.task.TaskRevision
+import com.example.template.collection.domain.task.TaskTimeline
 import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import tools.jackson.core.type.TypeReference
 import tools.jackson.databind.json.JsonMapper
+import java.time.Instant
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
@@ -26,8 +31,8 @@ class ExposedCollectionTaskRepository(
     override fun insert(task: CollectionTask): CollectionTask {
         CollectionTasksTable.insert {
             it[id] = task.id
-            it[createdAt] = task.createdAt.truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC)
-            writeDefinition(it, task)
+            it[createdAt] = task.createdAt.toStoredTime()
+            writeTask(it, task)
         }
         return CollectionTasksTable
             .selectAll()
@@ -62,7 +67,7 @@ class ExposedCollectionTaskRepository(
             CollectionTasksTable.update({
                 (CollectionTasksTable.id eq task.id) and (CollectionTasksTable.version eq expectedVersion)
             }) {
-                writeDefinition(it, task)
+                writeTask(it, task)
             }
         if (updated == 0) return null
         return CollectionTasksTable
@@ -72,7 +77,41 @@ class ExposedCollectionTaskRepository(
             .toTask()
     }
 
-    private fun writeDefinition(
+    override fun findDue(
+        now: Instant,
+        limit: Int,
+    ): List<CollectionTask> =
+        CollectionTasksTable
+            .selectAll()
+            .where { (CollectionTasksTable.enabled eq true) and (CollectionTasksTable.nextRunAt lessEq now.toStoredTime()) }
+            .orderBy(CollectionTasksTable.nextRunAt to SortOrder.ASC, CollectionTasksTable.id to SortOrder.ASC)
+            .limit(limit)
+            .map { it.toTask() }
+
+    override fun findUnscheduled(limit: Int): List<CollectionTask> =
+        CollectionTasksTable
+            .selectAll()
+            .where { (CollectionTasksTable.enabled eq true) and CollectionTasksTable.nextRunAt.isNull() }
+            .orderBy(CollectionTasksTable.createdAt to SortOrder.ASC, CollectionTasksTable.id to SortOrder.ASC)
+            .limit(limit)
+            .map { it.toTask() }
+
+    override fun advanceNextRun(
+        task: CollectionTask,
+        expectedNextRunAt: Instant?,
+    ): Boolean {
+        val unchangedSlot =
+            expectedNextRunAt?.let { CollectionTasksTable.nextRunAt eq it.toStoredTime() } ?: CollectionTasksTable.nextRunAt.isNull()
+        val updated =
+            CollectionTasksTable.update({
+                (CollectionTasksTable.id eq task.id) and (CollectionTasksTable.version eq task.version) and unchangedSlot
+            }) {
+                it[nextRunAt] = task.nextRunAt?.toStoredTime()
+            }
+        return updated == 1
+    }
+
+    private fun writeTask(
         statement: UpdateBuilder<*>,
         task: CollectionTask,
     ) {
@@ -83,10 +122,10 @@ class ExposedCollectionTaskRepository(
         statement[CollectionTasksTable.everySeconds] = task.definition.schedule.everySeconds
         statement[CollectionTasksTable.anchorAt] =
             task.definition.schedule.anchorAt
-                .truncatedTo(ChronoUnit.MICROS)
-                .atOffset(ZoneOffset.UTC)
+                .toStoredTime()
         statement[CollectionTasksTable.enabled] = task.enabled
         statement[CollectionTasksTable.version] = task.version
+        statement[CollectionTasksTable.nextRunAt] = task.nextRunAt?.toStoredTime()
     }
 
     private fun ResultRow.toTask(): CollectionTask =
@@ -94,7 +133,11 @@ class ExposedCollectionTaskRepository(
             id = this[CollectionTasksTable.id],
             definition = toDefinition(),
             revision = TaskRevision(this[CollectionTasksTable.enabled], this[CollectionTasksTable.version]),
-            createdAt = this[CollectionTasksTable.createdAt].toInstant(),
+            timeline =
+                TaskTimeline(
+                    createdAt = this[CollectionTasksTable.createdAt].toInstant(),
+                    nextRunAt = this[CollectionTasksTable.nextRunAt]?.toInstant(),
+                ),
         )
 
     private fun ResultRow.toDefinition(): TaskDefinition =
@@ -112,6 +155,10 @@ class ExposedCollectionTaskRepository(
                     anchorAt = this[CollectionTasksTable.anchorAt].toInstant(),
                 ),
         )
+
+    // Every stored time is truncated to the column precision, so the conditional advance compares values the same way
+    // they were read back.
+    private fun Instant.toStoredTime(): OffsetDateTime = truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC)
 
     private companion object {
         val parameterType = object : TypeReference<Map<String, String>>() {}

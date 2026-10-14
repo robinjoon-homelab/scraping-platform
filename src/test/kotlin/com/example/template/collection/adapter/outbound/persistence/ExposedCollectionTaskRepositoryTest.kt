@@ -5,6 +5,7 @@ import com.example.template.collection.domain.task.CollectionTask
 import com.example.template.collection.domain.task.IntervalSchedule
 import com.example.template.collection.domain.task.TaskDefinition
 import com.example.template.collection.domain.task.TaskRevision
+import com.example.template.collection.domain.task.TaskTimeline
 import com.example.template.support.persistence.MigratedH2Database
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
@@ -13,12 +14,14 @@ import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
 import java.sql.SQLException
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 // Sources are seeded with SQL so that only the task adapter takes part.
 class ExposedCollectionTaskRepositoryTest {
     private val database = MigratedH2Database()
     private val repository = ExposedCollectionTaskRepository(JsonMapper.builder().build())
+    private val now = Instant.parse("2026-01-01T05:30:00.123456789Z")
 
     @AfterEach
     fun closeDatabase() = database.close()
@@ -53,7 +56,7 @@ class ExposedCollectionTaskRepositoryTest {
                 schedule = IntervalSchedule(60, Instant.parse("2026-02-01T00:00:00.987654321Z")),
             )
 
-        val saved = requireNotNull(inTransaction { repository.update(original.revise(replacement), original.version) })
+        val saved = requireNotNull(inTransaction { repository.update(original.revise(replacement, now), original.version) })
 
         assertThat(inTransaction { repository.findById(saved.id) }).isEqualTo(saved)
         assertThat(saved.definition.sourceId).isEqualTo(secondSourceId)
@@ -69,14 +72,15 @@ class ExposedCollectionTaskRepositoryTest {
     fun `stale update leaves the stored task unchanged`() {
         val sourceId = seedSource()
         val original = inTransaction { repository.insert(task("00000000-0000-0000-0000-000000000001", sourceId)) }
-        val enabled = requireNotNull(inTransaction { repository.update(original.changeEnabled(true), 0) })
+        val enabled = requireNotNull(inTransaction { repository.update(original.changeEnabled(true, now), 0) })
 
-        val stale = inTransaction { repository.update(original.revise(original.definition.copy(name = "outdated")), 0) }
+        val stale = inTransaction { repository.update(original.revise(original.definition.copy(name = "outdated"), now), 0) }
 
         assertThat(stale).isNull()
         assertThat(inTransaction { repository.findById(original.id) }).isEqualTo(enabled)
         assertThat(enabled.enabled).isTrue()
         assertThat(enabled.version).isEqualTo(1)
+        assertThat(enabled.nextRunAt).isEqualTo(Instant.parse("2026-01-01T06:00:00.123456Z"))
     }
 
     @Test
@@ -100,7 +104,7 @@ class ExposedCollectionTaskRepositoryTest {
     }
 
     @Test
-    fun `migration rejects missing sources invalid schedules and negative versions`() {
+    fun `migration rejects missing sources invalid schedules negative versions and next runs of disabled tasks`() {
         val sourceId = seedSource()
         val saved = inTransaction { repository.insert(task("00000000-0000-0000-0000-000000000001", sourceId)) }
 
@@ -110,6 +114,7 @@ class ExposedCollectionTaskRepositoryTest {
         assertSqlRejected("UPDATE collection_tasks SET version = -1")
         assertSqlRejected("UPDATE collection_tasks SET resource = '//another-host.example'")
         assertSqlRejected("DELETE FROM sources")
+        assertSqlRejected("UPDATE collection_tasks SET next_run_at = TIMESTAMP WITH TIME ZONE '2026-01-01 00:00:00+00:00'")
 
         assertThat(inTransaction { repository.findById(saved.id) }).isEqualTo(saved)
     }
@@ -118,7 +123,7 @@ class ExposedCollectionTaskRepositoryTest {
     fun `updating a missing task returns null`() {
         val missing = task("00000000-0000-0000-0000-000000000001", seedSource())
 
-        assertThat(inTransaction { repository.update(missing.changeEnabled(true), 0) }).isNull()
+        assertThat(inTransaction { repository.update(missing.changeEnabled(true, now), 0) }).isNull()
         assertThat(inTransaction { repository.findById(missing.id) }).isNull()
     }
 
@@ -130,7 +135,9 @@ class ExposedCollectionTaskRepositoryTest {
 
         val saved =
             inTransaction {
-                repository.insert(CollectionTask.restore(original.id, definition, TaskRevision(original.enabled, original.version), latest))
+                repository.insert(
+                    CollectionTask.restore(original.id, definition, TaskRevision(original.enabled, original.version), TaskTimeline(latest)),
+                )
             }
 
         assertThat(saved.createdAt).isEqualTo(Instant.parse("9999-12-31T23:59:59.999999Z"))
@@ -138,11 +145,100 @@ class ExposedCollectionTaskRepositoryTest {
         assertThat(inTransaction { repository.findById(saved.id) }).isEqualTo(saved)
     }
 
+    @Test
+    fun `due tasks are enabled tasks whose next run is not after now in slot order`() {
+        val sourceId = seedSource()
+        val later = enabledTask("00000000-0000-0000-0000-000000000001", sourceId, now.minusSeconds(60))
+        val earlier = enabledTask("00000000-0000-0000-0000-000000000002", sourceId, now.minusSeconds(120))
+        val exactlyNow = enabledTask("00000000-0000-0000-0000-000000000003", sourceId, now)
+        enabledTask("00000000-0000-0000-0000-000000000004", sourceId, now.plusSeconds(1))
+        inTransaction { repository.insert(task("00000000-0000-0000-0000-000000000005", sourceId)) }
+        enabledTask("00000000-0000-0000-0000-000000000006", sourceId, null)
+
+        val due = inTransaction { repository.findDue(now, 10) }
+
+        assertThat(due.map { it.id }).containsExactly(earlier.id, later.id, exactlyNow.id)
+        assertThat(due.first()).isEqualTo(earlier)
+        assertThat(inTransaction { repository.findDue(now, 1) }.map { it.id }).containsExactly(earlier.id)
+    }
+
+    @Test
+    fun `unscheduled tasks are enabled tasks without a next run`() {
+        val sourceId = seedSource()
+        val unscheduled = enabledTask("00000000-0000-0000-0000-000000000001", sourceId, null)
+        enabledTask("00000000-0000-0000-0000-000000000002", sourceId, now)
+        inTransaction { repository.insert(task("00000000-0000-0000-0000-000000000003", sourceId)) }
+
+        assertThat(inTransaction { repository.findUnscheduled(10) }).containsExactly(unscheduled)
+    }
+
+    @Test
+    fun `advancing stores only the next run and keeps the version`() {
+        val stored = enabledTask("00000000-0000-0000-0000-000000000001", seedSource(), now.minusSeconds(60))
+        val advanced = stored.advanceSlot(now)
+
+        assertThat(inTransaction { repository.advanceNextRun(advanced, stored.nextRunAt) }).isTrue()
+
+        val reloaded = requireNotNull(inTransaction { repository.findById(stored.id) })
+        assertThat(reloaded).isEqualTo(advanced)
+        assertThat(reloaded.version).isEqualTo(stored.version)
+        assertThat(reloaded.nextRunAt).isEqualTo(Instant.parse("2026-01-01T06:00:00.123456Z"))
+    }
+
+    @Test
+    fun `advancing from a slot or version other than the stored one changes nothing`() {
+        val stored = enabledTask("00000000-0000-0000-0000-000000000001", seedSource(), now.minusSeconds(60))
+        val advanced = stored.advanceSlot(now)
+        inTransaction { repository.advanceNextRun(advanced, stored.nextRunAt) }
+
+        val competingScheduler = inTransaction { repository.advanceNextRun(stored.advanceSlot(now.plusSeconds(1)), stored.nextRunAt) }
+        val operatorChanged = requireNotNull(inTransaction { repository.update(advanced.changeEnabled(true, now), advanced.version) })
+        val staleVersion = inTransaction { repository.advanceNextRun(advanced.advanceSlot(now.plusSeconds(3600)), advanced.nextRunAt) }
+
+        assertThat(competingScheduler).isFalse()
+        assertThat(staleVersion).isFalse()
+        assertThat(operatorChanged.nextRunAt).isEqualTo(advanced.nextRunAt)
+        assertThat(inTransaction { repository.findById(stored.id) }).isEqualTo(operatorChanged)
+    }
+
+    @Test
+    fun `initializing requires the stored next run to be absent`() {
+        val sourceId = seedSource()
+        val unscheduled = enabledTask("00000000-0000-0000-0000-000000000001", sourceId, null)
+        val scheduled = enabledTask("00000000-0000-0000-0000-000000000002", sourceId, now)
+        val initialized = unscheduled.initializeNextRun(now)
+
+        assertThat(inTransaction { repository.advanceNextRun(initialized, null) }).isTrue()
+        assertThat(inTransaction { repository.advanceNextRun(initialized, null) }).isFalse()
+        assertThat(inTransaction { repository.advanceNextRun(scheduled.advanceSlot(now), null) }).isFalse()
+        assertThat(inTransaction { repository.findById(unscheduled.id) }).isEqualTo(initialized)
+        assertThat(inTransaction { repository.findById(scheduled.id) }).isEqualTo(scheduled)
+    }
+
     private fun <T> inTransaction(block: () -> T): T = database.inTransaction(block)
 
     private fun assertSqlRejected(sql: String) {
         assertThatThrownBy { database.execute(sql) }.isInstanceOf(SQLException::class.java)
     }
+
+    // Next run times are set with SQL so that due-time fixtures do not depend on the clock used by enabling.
+    private fun enabledTask(
+        id: String,
+        sourceId: UUID,
+        nextRunAt: Instant?,
+    ): CollectionTask {
+        val inserted = inTransaction { repository.insert(task(id, sourceId)) }
+        val nextRunSql = nextRunAt?.let { "TIMESTAMP WITH TIME ZONE '${sqlTime(it)}'" } ?: "NULL"
+        database.execute("UPDATE collection_tasks SET enabled = TRUE, version = 1, next_run_at = $nextRunSql WHERE id = '${inserted.id}'")
+        return requireNotNull(inTransaction { repository.findById(inserted.id) })
+    }
+
+    private fun sqlTime(value: Instant): String =
+        value
+            .truncatedTo(ChronoUnit.MICROS)
+            .toString()
+            .replace('T', ' ')
+            .replace("Z", "+00:00")
 
     private fun seedSource(): UUID {
         val id = UUID.randomUUID()

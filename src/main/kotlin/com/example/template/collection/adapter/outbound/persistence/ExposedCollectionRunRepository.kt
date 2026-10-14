@@ -1,6 +1,7 @@
 package com.example.template.collection.adapter.outbound.persistence
 
 import com.example.template.collection.application.port.output.CollectionRunRepository
+import com.example.template.collection.application.port.output.CollectionRunSlotTakenException
 import com.example.template.collection.domain.run.CollectionRun
 import com.example.template.collection.domain.run.CollectionRunStatus
 import com.example.template.collection.domain.run.RunState
@@ -16,6 +17,7 @@ import org.jetbrains.exposed.v1.core.ResultRow
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
+import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -31,9 +33,14 @@ class ExposedCollectionRunRepository(
     private val jsonMapper: JsonMapper,
 ) : CollectionRunRepository {
     override fun insert(run: CollectionRun): CollectionRun {
-        CollectionRunsTable.insert {
-            it[id] = run.id
-            writeRun(it, run)
+        try {
+            CollectionRunsTable.insert {
+                it[id] = run.id
+                writeRun(it, run)
+            }
+        } catch (exception: ExposedSQLException) {
+            if (exception.isSlotConflict()) throw CollectionRunSlotTakenException(run.task.taskId, run.scheduledFor, exception)
+            throw exception
         }
         return requireNotNull(findById(run.id))
     }
@@ -44,6 +51,15 @@ class ExposedCollectionRunRepository(
             .where { CollectionRunsTable.id eq id }
             .singleOrNull()
             ?.toRun()
+
+    override fun existsForSlot(
+        taskId: UUID,
+        scheduledFor: Instant,
+    ): Boolean =
+        !CollectionRunsTable
+            .selectAll()
+            .where { (CollectionRunsTable.taskId eq taskId) and (CollectionRunsTable.scheduledFor eq scheduledFor.toStoredTime()) }
+            .empty()
 
     override fun update(
         run: CollectionRun,
@@ -135,9 +151,15 @@ class ExposedCollectionRunRepository(
                 ),
         )
 
+    // PostgreSQL and H2 both report unique violations as SQLSTATE 23505 and name the violated constraint in the message.
+    private fun ExposedSQLException.isSlotConflict(): Boolean =
+        sqlState == UNIQUE_VIOLATION && message.orEmpty().contains(SLOT_CONSTRAINT, ignoreCase = true)
+
     private fun Instant.toStoredTime(): OffsetDateTime = truncatedTo(ChronoUnit.MICROS).atOffset(ZoneOffset.UTC)
 
     private companion object {
+        const val UNIQUE_VIOLATION = "23505"
+        const val SLOT_CONSTRAINT = "collection_runs_task_slot_unique"
         val finalStatuses = setOf(CollectionRunStatus.SUCCEEDED, CollectionRunStatus.FAILED)
         val parameterType = object : TypeReference<Map<String, String>>() {}
     }

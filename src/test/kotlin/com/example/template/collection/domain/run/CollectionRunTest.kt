@@ -37,7 +37,7 @@ class CollectionRunTest {
 
         val running = pending.start(startedAt)
         val succeeded = running.succeed(finishedAt)
-        val revisedTask = task.revise(definition.copy(name = "수정한 작업"))
+        val revisedTask = task.revise(definition.copy(name = "수정한 작업"), scheduledAt)
 
         assertThat(pending.status).isEqualTo(CollectionRunStatus.PENDING)
         assertThat(pending.startedAt).isNull()
