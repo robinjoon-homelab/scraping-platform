@@ -13,6 +13,7 @@ import com.example.template.collection.domain.task.TaskDefinition
 import com.example.template.support.persistence.MigratedH2Database
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
@@ -109,6 +110,68 @@ class ExposedCollectionRunRepositoryTest {
     }
 
     @Test
+    fun `starting stores the running run with its lease only while the run is still pending`() {
+        val pending = inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), seedSnapshot(), scheduledAt)) }
+        val running = pending.start(scheduledAt.plusSeconds(1))
+        val leaseUntil = scheduledAt.plusSeconds(301)
+
+        val started = requireNotNull(inTransaction { repository.updateStarted(running, leaseUntil) })
+
+        assertThat(started.status).isEqualTo(CollectionRunStatus.RUNNING)
+        assertThat(started.startedAt).isEqualTo(Instant.parse("2026-10-05T00:00:01.123456Z"))
+        assertThat(leaseOf(pending.id)).isEqualTo(Instant.parse("2026-10-05T00:05:01.123456Z"))
+        assertThat(inTransaction { repository.updateStarted(running, leaseUntil.plusSeconds(60)) }).isNull()
+        assertThat(leaseOf(pending.id)).isEqualTo(Instant.parse("2026-10-05T00:05:01.123456Z"))
+        val missing = CollectionRun.pending(UUID.randomUUID(), seedSnapshot(), scheduledAt).start(scheduledAt)
+        assertThat(inTransaction { repository.updateStarted(missing, leaseUntil) }).isNull()
+    }
+
+    @Test
+    fun `closing a started run clears its lease`() {
+        val pending = inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), seedSnapshot(), scheduledAt)) }
+        val running = requireNotNull(inTransaction { repository.updateStarted(pending.start(scheduledAt), scheduledAt.plusSeconds(300)) })
+
+        val failed =
+            inTransaction { repository.update(running.fail(scheduledAt.plusSeconds(1), "lease expired"), CollectionRunStatus.RUNNING) }
+
+        assertThat(failed?.status).isEqualTo(CollectionRunStatus.FAILED)
+        assertThat(leaseOf(pending.id)).isNull()
+    }
+
+    @Test
+    fun `pending runs are found once due, earliest scheduled first, up to the limit`() {
+        val later = insertPending(scheduledAt.plusSeconds(120))
+        val earliest = insertPending(scheduledAt)
+        val middle = insertPending(scheduledAt.plusSeconds(60))
+        insertPending(scheduledAt.plusSeconds(600))
+        val started = insertPending(scheduledAt)
+        inTransaction { repository.updateStarted(started.start(scheduledAt), scheduledAt.plusSeconds(300)) }
+        val now = scheduledAt.plusSeconds(300)
+
+        assertThat(inTransaction { repository.findPending(now, 2) }.map { it.id }).containsExactly(earliest.id, middle.id)
+        assertThat(inTransaction { repository.findPending(now, 10) }.map { it.id }).containsExactly(earliest.id, middle.id, later.id)
+    }
+
+    @Test
+    fun `expired leases are running runs whose lease ended before now or that have none`() {
+        val leaseEnd = scheduledAt.plusSeconds(10)
+        val expired = insertPending(scheduledAt)
+        inTransaction { repository.updateStarted(expired.start(scheduledAt), leaseEnd) }
+        val live = insertPending(scheduledAt)
+        inTransaction { repository.updateStarted(live.start(scheduledAt), scheduledAt.plusSeconds(100)) }
+        val unleased = insertPending(scheduledAt)
+        inTransaction { repository.update(unleased.start(scheduledAt), CollectionRunStatus.PENDING) }
+        insertPending(scheduledAt)
+
+        assertThat(inTransaction { repository.findExpiredLeases(scheduledAt.plusSeconds(50), 10) }.map { it.id })
+            .containsExactly(unleased.id, expired.id)
+        assertThat(inTransaction { repository.findExpiredLeases(Instant.parse("2026-10-05T00:00:10.123456Z"), 10) }.map { it.id })
+            .containsExactly(unleased.id)
+        assertThat(inTransaction { repository.findExpiredLeases(scheduledAt.plusSeconds(50), 1) }.map { it.id })
+            .containsExactly(unleased.id)
+    }
+
+    @Test
     fun `updating a missing run returns null`() {
         val missing = CollectionRun.pending(UUID.randomUUID(), seedSnapshot(), scheduledAt)
 
@@ -150,6 +213,18 @@ class ExposedCollectionRunRepositoryTest {
         }
 
     private fun <T> inTransaction(block: () -> T): T = database.inTransaction(block)
+
+    private fun insertPending(scheduledFor: Instant): CollectionRun =
+        inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), seedSnapshot(), scheduledFor)) }
+
+    private fun leaseOf(id: UUID): Instant? =
+        inTransaction {
+            CollectionRunsTable
+                .selectAll()
+                .where { CollectionRunsTable.id eq id }
+                .single()[CollectionRunsTable.leaseUntil]
+                ?.toInstant()
+        }
 
     private fun seedSnapshot(credentialRef: String? = null): TaskSnapshot {
         val sourceId = UUID.randomUUID()
