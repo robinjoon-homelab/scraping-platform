@@ -33,6 +33,13 @@ scraping:
     batch-size: 10
     # The lease must be longer than the connector's whole timeout, or a run still being collected is closed as expired.
     lease-duration: 5m
+  connector:
+    http:
+      connect-timeout: 5s
+      # Deadline of a whole collection (DNS checks, connection and body); keep it well below worker.lease-duration.
+      response-timeout: 10s
+      # At most the record payload limit of 1,000,000 characters, so every accepted body fits one record.
+      max-body-bytes: 1000000
 
 server:
   port: ${PORT:8080}
