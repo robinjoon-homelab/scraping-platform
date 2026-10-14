@@ -1,5 +1,7 @@
 package com.example.template.collection.adapter.inbound.web
 
+import com.example.template.collection.application.port.input.CollectedRecordNotFoundException
+import com.example.template.collection.application.port.input.CollectionRunNotFoundException
 import com.example.template.collection.application.port.input.CollectionTaskNotFoundException
 import com.example.template.collection.application.port.input.SourceNotFoundException
 import com.example.template.collection.application.port.input.StaleTaskVersionException
@@ -28,6 +30,18 @@ class ApiExceptionHandler : ResponseEntityExceptionHandler() {
     fun handleTaskNotFound(exception: CollectionTaskNotFoundException): ProblemDetail =
         ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, requireNotNull(exception.message)).apply {
             title = "Collection task not found"
+        }
+
+    @ExceptionHandler(CollectionRunNotFoundException::class)
+    fun handleRunNotFound(exception: CollectionRunNotFoundException): ProblemDetail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, requireNotNull(exception.message)).apply {
+            title = "Collection run not found"
+        }
+
+    @ExceptionHandler(CollectedRecordNotFoundException::class)
+    fun handleRecordNotFound(exception: CollectedRecordNotFoundException): ProblemDetail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, requireNotNull(exception.message)).apply {
+            title = "Collected record not found"
         }
 
     @ExceptionHandler(StaleTaskVersionException::class)

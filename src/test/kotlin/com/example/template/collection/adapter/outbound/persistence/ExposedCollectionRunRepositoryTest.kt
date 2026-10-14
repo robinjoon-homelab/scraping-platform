@@ -204,6 +204,22 @@ class ExposedCollectionRunRepositoryTest {
         assertThat(inTransaction { repository.existsForSlot(UUID.randomUUID(), scheduledAt) }).isFalse()
     }
 
+    @Test
+    fun `findByTask returns only the task runs newest scheduled time first and pages them`() {
+        val snapshot = seedSnapshot()
+        val runs = (0L..2L).map { CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt.plusSeconds(it * 3600)) }
+        inTransaction { runs.forEach(repository::insert) }
+        insertPending(scheduledAt.plusSeconds(10 * 3600))
+
+        val all = inTransaction { repository.findByTask(snapshot.taskId, 0, 10) }
+        val page = inTransaction { repository.findByTask(snapshot.taskId, 1, 1) }
+
+        assertThat(all.map { it.id }).containsExactly(runs[2].id, runs[1].id, runs[0].id)
+        assertThat(page.map { it.id }).containsExactly(runs[1].id)
+        assertThat(inTransaction { repository.findByTask(snapshot.taskId, 3, 10) }).isEmpty()
+        assertThat(inTransaction { repository.findByTask(UUID.randomUUID(), 0, 10) }).isEmpty()
+    }
+
     private fun countRuns(leased: Boolean = false): Long =
         inTransaction {
             CollectionRunsTable

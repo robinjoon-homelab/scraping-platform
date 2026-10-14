@@ -80,9 +80,60 @@ internal fun taskFields(prefix: String = ""): Array<FieldDescriptor> =
     arrayOf(
         fieldWithPath("${prefix}id").description("수집 작업 UUID"),
         *taskDefinitionFields("${prefix}definition."),
-        fieldWithPath("${prefix}enabled").description("수집 활성화 설정. 현재 버전은 실행기를 제공하지 않음"),
+        fieldWithPath("${prefix}enabled").description("수집 활성화 설정. true면 다음 슬롯부터 주기 실행"),
         fieldWithPath("${prefix}version").description("낙관적 잠금 버전. 생성 시 0, 변경마다 1 증가"),
         fieldWithPath("${prefix}createdAt").description("생성 시각, ISO 8601 UTC"),
+        fieldWithPath("${prefix}nextRunAt")
+            .type(JsonFieldType.STRING)
+            .optional()
+            .description("다음 실행 예정 시각, ISO 8601 UTC. 비활성 계획은 null"),
+    )
+
+internal fun runFields(prefix: String = ""): Array<FieldDescriptor> =
+    arrayOf(
+        fieldWithPath("${prefix}id").description("실행 UUID"),
+        fieldWithPath("${prefix}task.id").description("실행한 수집 작업 UUID"),
+        fieldWithPath("${prefix}task.version").description("실행 시점의 수집 작업 버전"),
+        fieldWithPath("${prefix}task.sourceId").description("실행 시점의 출처 UUID"),
+        fieldWithPath("${prefix}status").description("실행 상태: PENDING, RUNNING, SUCCEEDED, FAILED"),
+        fieldWithPath("${prefix}failureReason").type(JsonFieldType.STRING).optional().description("실패 사유. FAILED가 아니면 null"),
+        fieldWithPath("${prefix}times.scheduledFor").description("실행 예정 시각, ISO 8601 UTC"),
+        fieldWithPath("${prefix}times.startedAt").type(JsonFieldType.STRING).optional().description("시작 시각, ISO 8601 UTC. 시작 전 null"),
+        fieldWithPath("${prefix}times.finishedAt").type(JsonFieldType.STRING).optional().description("종료 시각, ISO 8601 UTC. 종료 전 null"),
+    )
+
+internal fun recordSummaryFields(prefix: String = ""): Array<FieldDescriptor> =
+    arrayOf(
+        fieldWithPath("${prefix}id").description("레코드 UUID"),
+        *recordIdentityFields(prefix),
+        fieldWithPath("${prefix}schemaVersion").description("레코드 스키마 버전"),
+        fieldWithPath("${prefix}collectedAt").description("수집 시각, ISO 8601 UTC"),
+        fieldWithPath("${prefix}sourceUpdatedAt")
+            .type(JsonFieldType.STRING)
+            .optional()
+            .description("출처가 알린 수정 시각, ISO 8601 UTC. 없으면 null"),
+        fieldWithPath("${prefix}payloadBytes").description("payload의 UTF-8 바이트 수. 목록은 payload 자체를 포함하지 않음"),
+    )
+
+internal fun recordFields(prefix: String = ""): Array<FieldDescriptor> =
+    arrayOf(
+        fieldWithPath("${prefix}id").description("레코드 UUID"),
+        *recordIdentityFields(prefix),
+        fieldWithPath("${prefix}schemaVersion").description("레코드 스키마 버전"),
+        fieldWithPath("${prefix}provenance.runId").description("이 내용 버전을 처음 관측해 저장한 실행 UUID"),
+        fieldWithPath("${prefix}provenance.sourceId").description("출처 UUID"),
+        fieldWithPath("${prefix}provenance.collectedAt").description("수집 시각, ISO 8601 UTC"),
+        fieldWithPath("${prefix}provenance.sourceUpdatedAt")
+            .type(JsonFieldType.STRING)
+            .optional()
+            .description("출처가 알린 수정 시각, ISO 8601 UTC. 없으면 null"),
+        fieldWithPath("${prefix}payload").description("수집한 원문 payload. 최대 1,000,000자"),
+    )
+
+private fun recordIdentityFields(prefix: String): Array<FieldDescriptor> =
+    arrayOf(
+        fieldWithPath("${prefix}identity.sourceRecordKey").description("출처 안에서 레코드를 구분하는 키"),
+        fieldWithPath("${prefix}identity.revisionHash").description("내용 버전을 나타내는 SHA-256 소문자 16진수 64자"),
     )
 
 internal fun problemFields(): Array<FieldDescriptor> =

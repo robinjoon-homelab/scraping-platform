@@ -76,7 +76,7 @@ BC가 정해져도 루트의 소유·생명주기가 미정이면 루트와 테�
 
 **목적지 주소 정책:** 요청 전과 응답 후에 호스트의 모든 해석 주소를 검사해 하나라도 허용되지 않으면 'destination address is not allowed'로 실패한다. 운영 조립은 항상 이 정책을 쓴다. IPv4는 [IANA IPv4 특수 목적 레지스트리](https://www.iana.org/assignments/iana-ipv4-special-registry/)에서 전역 도달이 True가 아닌 대역과 멀티캐스트·예약·브로드캐스트를 막는다. IPv6는 글로벌 유니캐스트 2000::/3만 허용하고 그 안의 2001::/23·2001:db8::/32·2002::/16(6to4)·3fff::/20을 막는다([IANA IPv6 특수 목적 레지스트리](https://www.iana.org/assignments/iana-ipv6-special-registry/)). 192.0.0.9·192.0.0.10, 2001::/23 안의 PCP·TURN·AMT·AS112 같은 전역 도달 예외도 HTTP API가 아닌 프로토콜 주소이므로 블록 단위로 함께 막는다. IPv4-mapped(::ffff:0:0/96)와 NAT64 공용 접두사(64:ff9b::/96)는 담긴 IPv4로 판정하고, 로컬 NAT64(64:ff9b:1::/48)·6to4·Teredo·IPv4 호환 주소는 해석하지 않고 거부한다. HttpClient는 연결 시 호스트를 다시 해석하므로 검사한 IP에 연결을 고정하지 못한다. JVM 주소 캐시가 만료되는 순간의 DNS 재바인딩은 요청 자체를 내부 주소로 보낼 수 있으며, 응답 후 재검사는 그 응답의 저장만 막는다. 이 간극은 클러스터 egress 네트워크 정책으로 막는다. 실패 사유에는 호스트·해석 주소·쿼리·헤더 값·본문을 넣지 않는다.
 
-**제공 범위:** DB를 쓰는 진입점은 HTTP 관리 API와 lease 만료·슬롯 선점·실행 진행을 호출하는 주기 스케줄러다. `scraping.worker.enabled=false`면 스케줄러가 없어 HTTP 관리 API만 DB를 쓴다. 커넥터는 HTTP_JSON만 있다. RSS_ATOM·HTML 커넥터, 저장된 레코드의 조회, BC 간 전달은 없다. 다른 입력 형식의 커넥터를 추가하면 공급자별 대상·페이지·파서 버전·비밀 참조·요청 제한·응답 크기·SSRF 방어를 정하고, 배치 크기와 체크포인트 해석 같은 커넥터별 계약을 설계한다. HTTP 상세는 REST Docs가 관리한다([API 변경](development.md#api-변경)).
+**제공 범위:** DB를 쓰는 진입점은 HTTP 관리 API와 lease 만료·슬롯 선점·실행 진행을 호출하는 주기 스케줄러다. `scraping.worker.enabled=false`면 스케줄러가 없어 HTTP 관리 API만 DB를 쓴다. 커넥터는 HTTP_JSON만 있다. RSS_ATOM·HTML 커넥터, BC 간 전달은 없다. 다른 입력 형식의 커넥터를 추가하면 공급자별 대상·페이지·파서 버전·비밀 참조·요청 제한·응답 크기·SSRF 방어를 정하고, 배치 크기와 체크포인트 해석 같은 커넥터별 계약을 설계한다. HTTP 상세는 REST Docs가 관리한다([API 변경](development.md#api-변경)).
 
 ### BC 간 연동 요구가 생기면
 

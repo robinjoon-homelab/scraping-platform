@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.HexFormat
+import java.util.UUID
 
 class ExposedCollectedRecordStoreTest {
     private val database = MigratedH2Database()
@@ -87,6 +88,94 @@ class ExposedCollectedRecordStoreTest {
         assertThat(inTransaction { store.saveNew(emptyList()) }).isZero()
     }
 
+    @Test
+    fun `a run lists the records it stored first by collection time without their payload`() {
+        val run = database.seedRun()
+        val laterRun = database.seedRun(sameTaskAs = run)
+        val updatedAt = Instant.parse("2020-02-29T12:30:00Z")
+        inTransaction {
+            store.saveNew(
+                listOf(
+                    record(run, "/late").at(collectedAt.plusSeconds(20)).withPayload("{\"name\":\"가나다\"}"),
+                    record(run, "/early").updatedAt(updatedAt),
+                    record(run, "/middle").at(collectedAt.plusSeconds(10)),
+                ),
+            )
+            store.saveNew(listOf(record(laterRun, "/early"), record(laterRun, "/other")))
+        }
+
+        val summaries = inTransaction { store.findFirstObservedBy(run.runId, 0, 10) }
+
+        assertThat(summaries.map { it.identity.sourceRecordKey }).containsExactly("/early", "/middle", "/late")
+        val early = summaries.first()
+        assertThat(early.identity.revisionHash).isEqualTo(REVISION_A)
+        assertThat(early.schemaVersion).isEqualTo("http-json/1")
+        assertThat(early.collectedAt).isEqualTo(Instant.parse("2026-10-05T00:00:00.123456Z"))
+        assertThat(early.sourceUpdatedAt).isEqualTo(updatedAt)
+        assertThat(early.payloadBytes).isEqualTo(11)
+        assertThat(summaries[1].sourceUpdatedAt).isNull()
+        assertThat(summaries.last().payloadBytes).isEqualTo(20)
+        assertThat(
+            inTransaction { store.findFirstObservedBy(laterRun.runId, 0, 10) }.map { it.identity.sourceRecordKey },
+        ).containsExactly("/other")
+    }
+
+    @Test
+    fun `payload size is the utf-8 byte count for supplementary plane characters too`() {
+        val run = database.seedRun()
+        inTransaction {
+            store.saveNew(
+                listOf(
+                    record(run, "/emoji").withPayload("{\"name\":\"😀\"}"),
+                    record(run, "/hangul").withPayload("{\"name\":\"한글\"}").at(collectedAt.plusSeconds(1)),
+                ),
+            )
+        }
+
+        val sizes =
+            inTransaction {
+                store.findFirstObservedBy(
+                    run.runId,
+                    0,
+                    10,
+                )
+            }.associate { it.identity.sourceRecordKey to it.payloadBytes }
+
+        assertThat(sizes).containsEntry("/emoji", 15).containsEntry("/hangul", 17)
+    }
+
+    @Test
+    fun `record pages follow the offset and limit and ties in collection time are ordered by id`() {
+        val run = database.seedRun()
+        inTransaction { store.saveNew(listOf("/a", "/b", "/c", "/d").map { record(run, it) }) }
+        val all = inTransaction { store.findFirstObservedBy(run.runId, 0, 10) }
+
+        val page = inTransaction { store.findFirstObservedBy(run.runId, 1, 2) }
+
+        assertThat(all.map { it.id.toString() }).isSorted()
+        assertThat(page).containsExactlyElementsOf(all.subList(1, 3))
+        assertThat(inTransaction { store.findFirstObservedBy(run.runId, 4, 2) }).isEmpty()
+        assertThat(inTransaction { store.findFirstObservedBy(UUID.randomUUID(), 0, 2) }).isEmpty()
+    }
+
+    @Test
+    fun `a record is found by id with its payload and provenance`() {
+        val run = database.seedRun()
+        val updatedAt = Instant.parse("2020-02-29T12:30:00Z")
+        inTransaction { store.saveNew(listOf(record(run, "/prices").updatedAt(updatedAt).withPayload("{\"price\":\"가격\"}"))) }
+        val id = inTransaction { store.findFirstObservedBy(run.runId, 0, 1) }.single().id
+
+        val found = requireNotNull(inTransaction { store.findById(id) })
+
+        assertThat(found.id).isEqualTo(id)
+        assertThat(found.record.identity).isEqualTo(RecordIdentity("/prices", REVISION_A))
+        assertThat(found.record.schemaVersion).isEqualTo("http-json/1")
+        assertThat(found.record.payload).isEqualTo("{\"price\":\"가격\"}")
+        assertThat(found.record.provenance)
+            .isEqualTo(RecordProvenance(run.runId, run.sourceId, Instant.parse("2026-10-05T00:00:00.123456Z"), updatedAt))
+        assertThat(inTransaction { store.findById(UUID.randomUUID()) }).isNull()
+    }
+
     private fun record(
         run: SeededRun,
         key: String,
@@ -98,6 +187,12 @@ class ExposedCollectedRecordStoreTest {
         payload = "{\"price\":1}",
         provenance = RecordProvenance(run.runId, run.sourceId, collectedAt, sourceUpdatedAt),
     )
+
+    private fun CollectedRecord.at(time: Instant) = copy(provenance = provenance.copy(collectedAt = time))
+
+    private fun CollectedRecord.updatedAt(time: Instant) = copy(provenance = provenance.copy(sourceUpdatedAt = time))
+
+    private fun CollectedRecord.withPayload(text: String) = copy(payload = text)
 
     private fun rowsOf(run: SeededRun) =
         inTransaction { CollectedRecordsTable.selectAll().where { CollectedRecordsTable.runId eq run.runId }.toList() }

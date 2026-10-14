@@ -57,6 +57,19 @@ class ExposedCollectionRunRepository(
             .singleOrNull()
             ?.toRun()
 
+    override fun findByTask(
+        taskId: UUID,
+        offset: Int,
+        limit: Int,
+    ): List<CollectionRun> =
+        CollectionRunsTable
+            .selectAll()
+            .where { CollectionRunsTable.taskId eq taskId }
+            .orderBy(CollectionRunsTable.scheduledFor to SortOrder.DESC, CollectionRunsTable.id to SortOrder.ASC)
+            .limit(limit)
+            .offset(offset.toLong())
+            .map { it.toRun() }
+
     override fun existsForSlot(
         taskId: UUID,
         scheduledFor: Instant,

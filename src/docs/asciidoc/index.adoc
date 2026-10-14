@@ -12,7 +12,7 @@
 모든 `/api` 요청에 `Authorization: Bearer <SCRAPING_API_TOKEN>`을 보냅니다.
 토큰 미설정은 503, 누락·불일치는 401입니다. 단일 운영자용이며 사용자별 데이터 분리는 없습니다.
 문서 예시의 test-operator-token은 테스트용입니다. URL·매개변수에 비밀값을 넣지 않습니다.
-실제 커넥터·주기 워커·실행 이력·수집 결과 저장은 구현하지 않았습니다.
+HTTP_JSON만 수집하며 RSS_ATOM·HTML은 실행이 FAILED입니다. enabled=true면 다음 슬롯부터 주기 실행하고, credentialRef가 있는 출처는 FAILED입니다.
 
 == 수집원
 
@@ -44,7 +44,7 @@ include::{snippets}/sources-list/response-fields.adoc[]
 
 == 수집 작업
 
-새 계획은 enabled=false·version=0입니다. 교체·활성 변경에는 expectedVersion이 필요하고 오래된 버전은 409입니다. enabled=true도 현재 수집을 시작하지 않습니다.
+새 계획은 enabled=false·version=0입니다. 교체·활성 변경에는 expectedVersion이 필요하고 오래된 버전은 409입니다. enabled=true면 다음 슬롯부터 주기 실행합니다.
 
 === 생성
 
@@ -83,6 +83,40 @@ include::{snippets}/tasks-enabled/path-parameters.adoc[]
 include::{snippets}/tasks-enabled/request-fields.adoc[]
 include::{snippets}/tasks-enabled/http-response.adoc[]
 include::{snippets}/tasks-enabled/response-fields.adoc[]
+
+== 수집 실행
+
+=== 조회
+
+include::{snippets}/runs-get/http-request.adoc[]
+include::{snippets}/runs-get/path-parameters.adoc[]
+include::{snippets}/runs-get/http-response.adoc[]
+include::{snippets}/runs-get/response-fields.adoc[]
+
+=== 목록
+
+include::{snippets}/runs-list/http-request.adoc[]
+include::{snippets}/runs-list/path-parameters.adoc[]
+include::{snippets}/runs-list/query-parameters.adoc[]
+include::{snippets}/runs-list/http-response.adoc[]
+include::{snippets}/runs-list/response-fields.adoc[]
+
+== 수집 레코드
+
+=== 조회
+
+include::{snippets}/records-get/http-request.adoc[]
+include::{snippets}/records-get/path-parameters.adoc[]
+include::{snippets}/records-get/http-response.adoc[]
+include::{snippets}/records-get/response-fields.adoc[]
+
+=== 목록
+
+include::{snippets}/run-records-list/http-request.adoc[]
+include::{snippets}/run-records-list/path-parameters.adoc[]
+include::{snippets}/run-records-list/query-parameters.adoc[]
+include::{snippets}/run-records-list/http-response.adoc[]
+include::{snippets}/run-records-list/response-fields.adoc[]
 
 == 오류
 

@@ -52,8 +52,12 @@ class CollectionTaskApiDocumentationTest : RestDocsWebTest() {
             .perform(postTask(taskDefinitionJson(sourceId, "  Market headlines  ")))
             .andExpect(status().isCreated)
             .andExpect(header().string("Location", "/api/collection-tasks/$taskId"))
-            .andExpect(content().json(taskJson(taskId, "Market headlines", enabled = false, version = 0), JsonCompareMode.STRICT))
-            .andDo(
+            .andExpect(
+                content().json(
+                    taskJson(taskId, enabled = false, version = 0, nextRunAt = null),
+                    JsonCompareMode.STRICT,
+                ),
+            ).andDo(
                 documented(
                     "tasks-create",
                     requestFields(*taskDefinitionFields()),
@@ -70,8 +74,12 @@ class CollectionTaskApiDocumentationTest : RestDocsWebTest() {
         mockMvc
             .perform(get("/api/collection-tasks/{id}", taskId).authorized())
             .andExpect(status().isOk)
-            .andExpect(content().json(taskJson(taskId, "Market headlines", enabled = false, version = 0), JsonCompareMode.STRICT))
-            .andDo(documented("tasks-get", resourceIdParameter(), responseFields(*taskFields())))
+            .andExpect(
+                content().json(
+                    taskJson(taskId, enabled = false, version = 0, nextRunAt = null),
+                    JsonCompareMode.STRICT,
+                ),
+            ).andDo(documented("tasks-get", resourceIdParameter(), responseFields(*taskFields())))
     }
 
     @Test
@@ -138,8 +146,12 @@ class CollectionTaskApiDocumentationTest : RestDocsWebTest() {
         mockMvc
             .perform(enableTask(taskId, 0))
             .andExpect(status().isOk)
-            .andExpect(content().json(taskJson(taskId, "Market headlines", enabled = true, version = 1), JsonCompareMode.STRICT))
-            .andDo(
+            .andExpect(
+                content().json(
+                    taskJson(taskId, enabled = true, version = 1, nextRunAt = "2026-10-05T01:00:00Z"),
+                    JsonCompareMode.STRICT,
+                ),
+            ).andDo(
                 documented(
                     "tasks-enabled",
                     resourceIdParameter(),
@@ -270,11 +282,12 @@ class CollectionTaskApiDocumentationTest : RestDocsWebTest() {
 
     private fun taskJson(
         id: UUID,
-        name: String,
         enabled: Boolean,
         version: Long,
+        nextRunAt: String?,
     ) = """
-        {"id":"$id","definition":${taskDefinitionJson(sourceId, name)},"enabled":$enabled,"version":$version,"createdAt":"$createdAt"}
+        {"id":"$id","definition":${taskDefinitionJson(sourceId)},"enabled":$enabled,"version":$version,"createdAt":"$createdAt",
+         "nextRunAt":${nextRunAt?.let { "\"$it\"" }}}
         """.trimIndent()
 
     private fun postTask(body: String) = post("/api/collection-tasks").authorized().contentType(MediaType.APPLICATION_JSON).content(body)

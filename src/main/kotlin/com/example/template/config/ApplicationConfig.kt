@@ -1,5 +1,6 @@
 package com.example.template.config
 
+import com.example.template.collection.application.port.input.CollectionRunQueryUseCase
 import com.example.template.collection.application.port.input.CollectionSchedulingUseCase
 import com.example.template.collection.application.port.input.CollectionTaskUseCase
 import com.example.template.collection.application.port.input.CollectionWorkerUseCase
@@ -10,6 +11,7 @@ import com.example.template.collection.application.port.output.CollectionConnect
 import com.example.template.collection.application.port.output.CollectionRunRepository
 import com.example.template.collection.application.port.output.CollectionTaskRepository
 import com.example.template.collection.application.port.output.SourceRepository
+import com.example.template.collection.application.service.CollectionRunQueryService
 import com.example.template.collection.application.service.CollectionRunService
 import com.example.template.collection.application.service.CollectionSchedulingService
 import com.example.template.collection.application.service.CollectionSlotService
@@ -39,6 +41,13 @@ class ApplicationConfig {
         sources: SourceRepository,
         clock: Clock,
     ): CollectionTaskUseCase = CollectionTaskService(repository, sources, clock)
+
+    @Bean
+    fun collectionRunQueryUseCase(
+        tasks: CollectionTaskRepository,
+        runs: CollectionRunRepository,
+        records: CollectedRecordStore,
+    ): CollectionRunQueryUseCase = CollectionRunQueryService(tasks, runs, records)
 
     @Bean
     fun collectionSlotService(
