@@ -27,6 +27,12 @@ spring:
 scraping:
   security:
     api-token: ${SCRAPING_API_TOKEN:}
+  worker:
+    enabled: true
+    interval: 30s
+    batch-size: 10
+    # The lease must be longer than the connector's whole timeout, or a run still being collected is closed as expired.
+    lease-duration: 5m
 
 server:
   port: ${PORT:8080}

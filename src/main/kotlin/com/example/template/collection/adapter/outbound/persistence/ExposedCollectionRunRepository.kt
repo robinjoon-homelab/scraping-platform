@@ -14,8 +14,13 @@ import com.example.template.collection.domain.task.CollectionTarget
 import com.example.template.collection.domain.task.IntervalSchedule
 import com.example.template.collection.domain.task.TaskDefinition
 import org.jetbrains.exposed.v1.core.ResultRow
+import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.isNull
+import org.jetbrains.exposed.v1.core.less
+import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.or
 import org.jetbrains.exposed.v1.core.statements.UpdateBuilder
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.insert
@@ -61,16 +66,63 @@ class ExposedCollectionRunRepository(
             .where { (CollectionRunsTable.taskId eq taskId) and (CollectionRunsTable.scheduledFor eq scheduledFor.toStoredTime()) }
             .empty()
 
+    override fun findPending(
+        now: Instant,
+        limit: Int,
+    ): List<CollectionRun> =
+        CollectionRunsTable
+            .selectAll()
+            .where {
+                (CollectionRunsTable.status eq CollectionRunStatus.PENDING.name) and
+                    (CollectionRunsTable.scheduledFor lessEq now.toStoredTime())
+            }.orderBy(CollectionRunsTable.scheduledFor to SortOrder.ASC, CollectionRunsTable.id to SortOrder.ASC)
+            .limit(limit)
+            .map { it.toRun() }
+
+    override fun findExpiredLeases(
+        now: Instant,
+        limit: Int,
+    ): List<CollectionRun> =
+        CollectionRunsTable
+            .selectAll()
+            .where {
+                (CollectionRunsTable.status eq CollectionRunStatus.RUNNING.name) and
+                    (CollectionRunsTable.leaseUntil.isNull() or (CollectionRunsTable.leaseUntil less now.toStoredTime()))
+            }.orderBy(CollectionRunsTable.leaseUntil to SortOrder.ASC_NULLS_FIRST, CollectionRunsTable.id to SortOrder.ASC)
+            .limit(limit)
+            .map { it.toRun() }
+
+    override fun updateStarted(
+        run: CollectionRun,
+        leaseUntil: Instant,
+    ): CollectionRun? {
+        require(run.status == CollectionRunStatus.RUNNING) { "only a running run can take a lease" }
+        return updateWhileStatus(run, CollectionRunStatus.PENDING) {
+            it[CollectionRunsTable.leaseUntil] = leaseUntil.toStoredTime()
+        }
+    }
+
     override fun update(
         run: CollectionRun,
         expectedStatus: CollectionRunStatus,
     ): CollectionRun? {
         if (expectedStatus in finalStatuses) return null
+        return updateWhileStatus(run, expectedStatus) {
+            if (run.status in finalStatuses) it[CollectionRunsTable.leaseUntil] = null
+        }
+    }
+
+    private fun updateWhileStatus(
+        run: CollectionRun,
+        expectedStatus: CollectionRunStatus,
+        writeLease: (UpdateBuilder<*>) -> Unit,
+    ): CollectionRun? {
         val updated =
             CollectionRunsTable.update({
                 (CollectionRunsTable.id eq run.id) and (CollectionRunsTable.status eq expectedStatus.name)
             }) {
                 writeRun(it, run)
+                writeLease(it)
             }
         if (updated == 0) return null
         return findById(run.id)

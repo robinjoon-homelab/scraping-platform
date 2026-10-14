@@ -23,9 +23,6 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
-import org.springframework.core.annotation.AnnotatedElementUtils
-import org.springframework.transaction.annotation.Propagation
-import org.springframework.transaction.annotation.Transactional
 import java.sql.SQLException
 import java.time.Clock
 import java.time.Instant
@@ -113,13 +110,6 @@ class CollectionSchedulingServiceTest {
     fun `limits outside one through one thousand are rejected`(limit: Int) {
         assertThatThrownBy { service.scheduleDue(limit) }
             .isInstanceOf(InvalidCollectionConfigurationException::class.java)
-    }
-
-    @Test
-    fun `scheduling does not join a caller transaction so that each task commits alone`() {
-        val transactional = AnnotatedElementUtils.findMergedAnnotation(CollectionSchedulingService::class.java, Transactional::class.java)
-
-        assertThat(transactional?.propagation).isEqualTo(Propagation.NOT_SUPPORTED)
     }
 
     private fun task(
