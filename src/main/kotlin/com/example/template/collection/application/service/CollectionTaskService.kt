@@ -50,7 +50,7 @@ class CollectionTaskService(
     ): CollectionTask {
         val current = getAtVersion(id, expectedVersion)
         requireSource(definition.sourceId)
-        val revised = current.revise(definition)
+        val revised = current.revise(definition, Instant.now(clock))
         return update(revised, expectedVersion)
     }
 
@@ -59,7 +59,7 @@ class CollectionTaskService(
         id: UUID,
         expectedVersion: Long,
         enabled: Boolean,
-    ): CollectionTask = update(getAtVersion(id, expectedVersion).changeEnabled(enabled), expectedVersion)
+    ): CollectionTask = update(getAtVersion(id, expectedVersion).changeEnabled(enabled, Instant.now(clock)), expectedVersion)
 
     private fun getAtVersion(
         id: UUID,

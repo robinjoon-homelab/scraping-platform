@@ -2,7 +2,10 @@ package com.example.template.collection.domain.task
 
 import com.example.template.collection.domain.validateCollectionConfiguration
 
-/** Every accepted mutation advances the version, including a repeated activation value. */
+/**
+ * Every accepted management mutation advances the version, including a repeated activation value. Scheduler slot
+ * advancement is not a management mutation and keeps the version.
+ */
 data class TaskRevision(
     val enabled: Boolean,
     val version: Long,

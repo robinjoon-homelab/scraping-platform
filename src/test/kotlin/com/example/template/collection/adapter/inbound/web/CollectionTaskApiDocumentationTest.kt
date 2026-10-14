@@ -107,7 +107,7 @@ class CollectionTaskApiDocumentationTest : RestDocsWebTest() {
     @Test
     fun `replace returns the revised task`() {
         val replacement = definition(otherSourceId, "Technology headlines", "/technology")
-        every { taskUseCase.replace(taskId, 0, replacement) } returns task(taskId).revise(replacement)
+        every { taskUseCase.replace(taskId, 0, replacement) } returns task(taskId).revise(replacement, createdAt)
         val body = """{"expectedVersion":0,"definition":${taskDefinitionJson(otherSourceId, "Technology headlines", "/technology")}}"""
 
         mockMvc
@@ -133,7 +133,7 @@ class CollectionTaskApiDocumentationTest : RestDocsWebTest() {
 
     @Test
     fun `enabling returns the enabled task`() {
-        every { taskUseCase.setEnabled(taskId, 0, true) } returns task(taskId).changeEnabled(true)
+        every { taskUseCase.setEnabled(taskId, 0, true) } returns task(taskId).changeEnabled(true, createdAt)
 
         mockMvc
             .perform(enableTask(taskId, 0))

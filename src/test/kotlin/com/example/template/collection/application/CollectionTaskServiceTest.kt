@@ -92,18 +92,19 @@ class CollectionTaskServiceTest {
 
     @Test
     fun `replacement returns the trimmed definition as the next version and keeps identity and state`() {
-        val original = task().changeEnabled(true)
+        val original = task().changeEnabled(true, now)
         every { repository.findById(original.id) } returns original
         every { sources.findById(source.id) } returns source
         every { repository.update(any(), 1) } answers { firstArg() }
 
-        val revised = service.replace(original.id, 1, definition("  Producer prices  "))
+        val revised = service.replace(original.id, 1, definition("  Producer prices  ").copy(schedule = IntervalSchedule(600, now)))
 
         assertThat(revised.id).isEqualTo(original.id)
         assertThat(revised.definition.name).isEqualTo("Producer prices")
         assertThat(revised.createdAt).isEqualTo(original.createdAt)
         assertThat(revised.enabled).isTrue()
         assertThat(revised.version).isEqualTo(2)
+        assertThat(revised.nextRunAt).isEqualTo(now.plusSeconds(600))
     }
 
     @Test
@@ -118,9 +119,9 @@ class CollectionTaskServiceTest {
     }
 
     @Test
-    fun `enabling and disabling return the next version with the requested state`() {
+    fun `enabling schedules the next slot after the clock time and disabling clears it`() {
         val original = task()
-        val enabledTask = original.changeEnabled(true)
+        val enabledTask = original.changeEnabled(true, now)
         every { repository.findById(original.id) } returns original andThen enabledTask
         every { repository.update(any(), any()) } answers { firstArg() }
 
@@ -128,14 +129,16 @@ class CollectionTaskServiceTest {
         val disabled = service.setEnabled(original.id, 1, false)
 
         assertThat(enabled).isEqualTo(enabledTask)
+        assertThat(enabled.nextRunAt).isEqualTo(now.plusSeconds(3600))
         assertThat(disabled.enabled).isFalse()
+        assertThat(disabled.nextRunAt).isNull()
         assertThat(disabled.version).isEqualTo(2)
         assertThat(disabled.definition).isEqualTo(original.definition)
     }
 
     @Test
     fun `stale expected versions cannot replace or enable a task`() {
-        val current = task().changeEnabled(true)
+        val current = task().changeEnabled(true, now)
         every { repository.findById(current.id) } returns current
 
         assertThatThrownBy { service.replace(current.id, 0, definition("Changed")) }
