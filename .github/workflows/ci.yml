@@ -101,7 +101,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      APP_NAME: scraping-platform
+      APP_NAME: ${{ vars.HOMELAB_APP_NAME }}
       REGISTRY_HOST: ${{ vars.HOMELAB_REGISTRY_HOST }}
       REGISTRY_IMAGE: ${{ vars.HOMELAB_REGISTRY_IMAGE }}
     steps:

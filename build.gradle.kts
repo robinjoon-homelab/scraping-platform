@@ -49,6 +49,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-restdocs")
     testImplementation("org.springframework.restdocs:spring-restdocs-mockmvc")
     testImplementation("com.tngtech.archunit:archunit:1.5.1")
+    testImplementation("io.mockk:mockk:1.14.11")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     detektPlugins(project(":quality-rules"))

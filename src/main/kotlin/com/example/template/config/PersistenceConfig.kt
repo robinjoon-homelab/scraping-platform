@@ -1,9 +1,9 @@
 package com.example.template.config
 
-import com.example.template.adapter.outbound.persistence.ExposedCollectionTaskRepository
-import com.example.template.adapter.outbound.persistence.ExposedSourceRepository
-import com.example.template.application.port.output.CollectionTaskRepository
-import com.example.template.application.port.output.SourceRepository
+import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionTaskRepository
+import com.example.template.collection.adapter.outbound.persistence.ExposedSourceRepository
+import com.example.template.collection.application.port.output.CollectionTaskRepository
+import com.example.template.collection.application.port.output.SourceRepository
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import tools.jackson.databind.json.JsonMapper

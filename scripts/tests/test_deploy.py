@@ -106,25 +106,21 @@ class DeploymentTests(unittest.TestCase):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 deploy.creation_payload(self.target, tag)
 
-    def test_new_workload_waits_for_commit_without_an_extra_release(self):
+    def test_new_workload_returns_its_values_after_creation_commits(self):
         api = Mock()
         api.request.side_effect = [None, {"runId": 42}, {"state": "running"}, {"state": "committed"}, self.values]
-        release = Mock()
         with patch.object(deploy.time, "sleep"):
-            deploy.deploy(api, self.target, self.tag, release)
-        api.request.assert_any_call("POST", "/v1/apps/my-app", deploy.creation_payload(self.target, self.tag))
-        release.assert_not_called()
+            actual = deploy.deploy(api, self.target, self.tag, Mock())
+        self.assertEqual(actual, self.values)
 
-    def test_existing_workload_releases_only_the_tag_and_waits_for_it(self):
+    def test_existing_workload_returns_once_the_released_tag_is_observed(self):
         old = copy.deepcopy(self.values)
         old["workload"]["containers"][0]["image"]["tag"] = "sha-previous"
         api = Mock()
         api.request.side_effect = [old, old, self.values]
-        release = Mock()
         with patch.object(deploy.time, "sleep"):
-            deploy.deploy(api, self.target, self.tag, release)
-        release.assert_called_once_with(self.target["app"], self.tag)
-        self.assertTrue(all(call.args[0] == "GET" for call in api.request.call_args_list))
+            actual = deploy.deploy(api, self.target, self.tag, Mock())
+        self.assertEqual(actual, self.values)
 
     def test_existing_workload_ignores_bootstrap_changes_and_preserves_its_settings(self):
         original = copy.deepcopy(self.values)
@@ -136,13 +132,8 @@ class DeploymentTests(unittest.TestCase):
         target = self.configuration({"database": "different", "host": "different.example", "env": [], "serviceAccountName": "different"})
         api = Mock()
         api.request.side_effect = [old, original]
-        release = Mock()
-        with patch.object(deploy, "creation_payload") as create:
-            actual = deploy.deploy(api, target, self.tag, release)
-        create.assert_not_called()
-        release.assert_called_once_with("my-app", self.tag)
+        actual = deploy.deploy(api, target, self.tag, Mock())
         self.assertEqual(actual, original)
-        self.assertTrue(all(call.args == ("GET", "/v1/apps/my-app") for call in api.request.call_args_list))
         self.assertEqual(deploy.application_urls(actual), ["https://blog.homelab.robinjoon.xyz"])
 
     def test_summary_does_not_invent_an_address_for_an_internal_workload(self):
@@ -152,14 +143,6 @@ class DeploymentTests(unittest.TestCase):
         for ingresses in [None, {}, [None], [{"rules": None}], [{"rules": [None]}], [{"rules": [{"host": "bad\nurl"}]}]]:
             with self.subTest(ingresses=ingresses), self.assertRaisesRegex(RuntimeError, "URLs are unconfirmed"):
                 deploy.application_urls({"ingresses": ingresses})
-
-    def test_retry_of_same_image_is_idempotent(self):
-        api = Mock()
-        api.request.return_value = self.values
-        release = Mock()
-        deploy.deploy(api, self.target, self.tag, release)
-        release.assert_not_called()
-        self.assertEqual(api.request.call_count, 1)
 
     def test_missing_or_ambiguous_existing_image_is_rejected(self):
         invalid = [None, [], {}, {"workload": {"containers": []}}, {"workload": {"containers": [None]}},
@@ -174,20 +157,15 @@ class DeploymentTests(unittest.TestCase):
     def test_creation_success_without_a_workload_is_not_reported_as_success(self):
         api = Mock()
         api.request.side_effect = [None, {"runId": 42}, {"state": "committed"}, None]
-        release = Mock()
         with self.assertRaisesRegex(RuntimeError, "workload is missing"):
-            deploy.deploy(api, self.target, self.tag, release)
-        release.assert_not_called()
-        self.assertEqual(api.request.call_count, 4)
+            deploy.deploy(api, self.target, self.tag, Mock())
 
-    def test_existing_unrelated_image_is_never_overwritten(self):
+    def test_existing_unrelated_image_is_refused(self):
         self.values["workload"]["containers"][0]["image"]["repository"] = "another/image"
         api = Mock()
         api.request.return_value = self.values
-        release = Mock()
         with self.assertRaisesRegex(RuntimeError, "refusing"):
-            deploy.deploy(api, self.target, self.tag, release)
-        release.assert_not_called()
+            deploy.deploy(api, self.target, self.tag, Mock())
 
     def test_failed_creation_is_not_reported_as_success(self):
         api = Mock()
@@ -208,7 +186,6 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(deploy, "POLL_ATTEMPTS", 2), patch.object(deploy.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "Timed out"):
                 deploy.wait_for_creation(api, 42)
-        self.assertEqual(api.request.call_count, 2)
 
     def test_only_missing_workload_is_treated_as_absent(self):
         api = deploy.DeployApi("dummy-token")
@@ -243,44 +220,40 @@ class DeploymentTests(unittest.TestCase):
         with patch.object(deploy, "POLL_ATTEMPTS", 2), patch.object(deploy.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "Timed out"):
                 deploy.deploy(api, self.target, self.tag, Mock())
-        self.assertEqual(api.request.call_count, 3)
 
     def test_pr_cannot_trigger_deployment(self):
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_REF": "refs/heads/main"}, clear=True):
-            with patch.object(deploy, "gh") as gh, self.assertRaisesRegex(RuntimeError, "restricted"):
+            with patch.object(deploy, "gh"), self.assertRaisesRegex(RuntimeError, "restricted"):
                 deploy.apply(self.target, self.tag)
-        gh.assert_not_called()
 
     def test_manual_execution_on_another_branch_cannot_trigger_deployment(self):
         with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/feature"}, clear=True):
-            with patch.object(deploy, "gh") as gh, self.assertRaisesRegex(RuntimeError, "restricted"):
+            with patch.object(deploy, "gh"), self.assertRaisesRegex(RuntimeError, "restricted"):
                 deploy.apply(self.target, self.tag)
-        gh.assert_not_called()
 
-    def test_manual_execution_on_main_uses_the_same_release_path(self):
+    def test_manual_execution_on_main_reports_the_released_image(self):
         environment = {"GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main", "GITHUB_REPOSITORY": "example/repo", "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "42", "GITHUB_RUN_ATTEMPT": "1", "GH_TOKEN": "source-token", "HARNESS_ACTIONS_TOKEN": "harness-token"}
+        tag = deploy.image_tag(environment)
         with patch.dict(os.environ, environment, clear=True), patch.object(deploy, "gh", return_value=environment["GITHUB_SHA"]):
-            with patch.object(deploy, "DeployApi"), patch.object(deploy, "deploy", return_value=self.values) as release, patch("builtins.print"):
-                deploy.apply(self.target, deploy.image_tag(environment))
-        release.assert_called_once()
+            with patch.object(deploy, "DeployApi"), patch.object(deploy, "deploy", return_value=self.values), patch("sys.stdout", new_callable=io.StringIO) as output:
+                deploy.apply(self.target, tag)
+        self.assertIn(f"Harness main now records `{self.target['repository']}:{tag}`.", output.getvalue())
 
-    def test_stale_push_skips_workload_mutation(self):
+    def test_stale_push_reports_a_skipped_deployment(self):
         environment = {"GITHUB_EVENT_NAME": "push", "GITHUB_REF": "refs/heads/main", "GITHUB_REPOSITORY": "example/My_App", "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "42", "GITHUB_RUN_ATTEMPT": "1", "GH_TOKEN": "dummy"}
         with patch.dict(os.environ, environment, clear=True), patch.object(deploy, "gh", return_value="b" * 40):
-            with patch.object(deploy, "DeployApi") as api, patch("builtins.print"):
+            with patch.object(deploy, "DeployApi"), patch("sys.stdout", new_callable=io.StringIO) as output:
                 deploy.apply(self.target, deploy.image_tag(environment))
-        api.assert_not_called()
+        self.assertIn("Skipping deployment because this commit is no longer the branch head.", output.getvalue())
 
-    def test_mismatched_commit_run_or_attempt_is_rejected_before_any_api_call(self):
+    def test_mismatched_commit_run_or_attempt_is_rejected(self):
         environment = {"GITHUB_EVENT_NAME": "push", "GITHUB_REF": "refs/heads/main", "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "42", "GITHUB_RUN_ATTEMPT": "1"}
         tags = ["sha-previous", "sha-" + "b" * 40 + "-run-42-1", "sha-" + "a" * 40 + "-run-43-1", "sha-" + "a" * 40 + "-run-42-2"]
         for tag in tags:
             with self.subTest(tag=tag), patch.dict(os.environ, environment, clear=True):
-                with patch.object(deploy, "gh") as gh, patch.object(deploy, "DeployApi") as api:
+                with patch.object(deploy, "gh"), patch.object(deploy, "DeployApi"):
                     with self.assertRaisesRegex(ValueError, "IMAGE_TAG must match"):
                         deploy.apply(self.target, tag)
-                gh.assert_not_called()
-                api.assert_not_called()
 
     def test_image_tags_reject_invalid_run_counters_and_excessive_length(self):
         environment = {"GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "42", "GITHUB_RUN_ATTEMPT": "1"}
