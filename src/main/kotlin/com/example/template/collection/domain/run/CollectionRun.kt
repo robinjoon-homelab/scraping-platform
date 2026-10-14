@@ -32,20 +32,31 @@ class CollectionRun private constructor(
         reason: String,
     ): CollectionRun {
         check(status == CollectionRunStatus.RUNNING) { "only a running run can fail" }
-        validateCollectionConfiguration(
-            reason.isNotBlank() && reason.length <= MAX_FAILURE_LENGTH,
-            "failure reason must be 1..1000 characters",
-        )
+        validateFailureReason(reason)
         return CollectionRun(id, task, timeline.copy(finishedAt = at), CollectionRunStatus.FAILED, reason)
     }
 
     companion object {
-        private const val MAX_FAILURE_LENGTH = 1000
-
         fun pending(
             id: UUID,
             task: TaskSnapshot,
             scheduledFor: Instant,
         ): CollectionRun = CollectionRun(id, task, RunTimeline(scheduledFor), CollectionRunStatus.PENDING)
+
+        // Stored rows are validated like new transitions so that corrupted data fails at the boundary.
+        fun restore(
+            id: UUID,
+            task: TaskSnapshot,
+            timeline: RunTimeline,
+            state: RunState,
+        ): CollectionRun {
+            val expectedStarted = state.status != CollectionRunStatus.PENDING
+            val expectedFinished = state.status == CollectionRunStatus.SUCCEEDED || state.status == CollectionRunStatus.FAILED
+            validateCollectionConfiguration(
+                (timeline.startedAt != null) == expectedStarted && (timeline.finishedAt != null) == expectedFinished,
+                "run timestamps do not match the ${state.status} status",
+            )
+            return CollectionRun(id, task, timeline, state.status, state.failureReason)
+        }
     }
 }
