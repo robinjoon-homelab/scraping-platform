@@ -13,6 +13,13 @@ interface CollectionRunRepository {
 
     fun findById(id: UUID): CollectionRun?
 
+    // A task's runs, newest scheduled time first, then by id.
+    fun findByTask(
+        taskId: UUID,
+        offset: Int,
+        limit: Int,
+    ): List<CollectionRun>
+
     fun existsForSlot(
         taskId: UUID,
         scheduledFor: Instant,

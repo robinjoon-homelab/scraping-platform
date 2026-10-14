@@ -11,9 +11,10 @@ data class CollectionTaskResponse(
     val enabled: Boolean,
     val version: Long,
     val createdAt: Instant,
+    val nextRunAt: Instant?,
 ) {
     companion object {
         fun from(task: CollectionTask): CollectionTaskResponse =
-            CollectionTaskResponse(task.id, task.definition, task.enabled, task.version, task.createdAt)
+            CollectionTaskResponse(task.id, task.definition, task.enabled, task.version, task.createdAt, task.nextRunAt)
     }
 }

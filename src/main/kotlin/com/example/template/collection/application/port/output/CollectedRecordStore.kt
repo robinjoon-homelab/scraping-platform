@@ -1,6 +1,9 @@
 package com.example.template.collection.application.port.output
 
+import com.example.template.collection.application.model.CollectedRecordSummary
+import com.example.template.collection.application.model.StoredCollectedRecord
 import com.example.template.collection.domain.run.CollectedRecord
+import java.util.UUID
 
 // Records are values of a run's batch, not a root, so this contract never receives or returns a run. Where the records
 // live is the adapter's choice; callers rely only on the rules below.
@@ -11,4 +14,13 @@ interface CollectedRecordStore {
      * Safe against a concurrent store of the same version.
      */
     fun saveNew(records: List<CollectedRecord>): Int
+
+    // Summaries of the records this run stored first (see saveNew), by collection time and then id. They carry no payload.
+    fun findFirstObservedBy(
+        runId: UUID,
+        offset: Int,
+        limit: Int,
+    ): List<CollectedRecordSummary>
+
+    fun findById(id: UUID): StoredCollectedRecord?
 }
