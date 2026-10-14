@@ -123,6 +123,88 @@ class CollectionRunTest {
         }.isInstanceOf(InvalidCollectionConfigurationException::class.java)
     }
 
+    @ParameterizedTest
+    @EnumSource(CollectionRunStatus::class)
+    fun `상태에 맞는 시각과 사유로 복원한 실행은 같은 값을 돌려준다`(status: CollectionRunStatus) {
+        val startedAt = if (status == CollectionRunStatus.PENDING) null else scheduledAt.plusSeconds(1)
+        val finishedAt =
+            if (status == CollectionRunStatus.SUCCEEDED ||
+                status == CollectionRunStatus.FAILED
+            ) {
+                scheduledAt.plusSeconds(2)
+            } else {
+                null
+            }
+        val reason = if (status == CollectionRunStatus.FAILED) "source unavailable" else null
+
+        val restored =
+            CollectionRun.restore(
+                UUID.randomUUID(),
+                snapshot(),
+                RunTimeline(scheduledAt, startedAt, finishedAt),
+                RunState(status, reason),
+            )
+
+        assertThat(restored.status).isEqualTo(status)
+        assertThat(restored.scheduledFor).isEqualTo(scheduledAt)
+        assertThat(restored.startedAt).isEqualTo(startedAt)
+        assertThat(restored.finishedAt).isEqualTo(finishedAt)
+        assertThat(restored.failureReason).isEqualTo(reason)
+    }
+
+    @Test
+    fun `복원한 실행도 정상 전이와 같은 방식으로 이어서 전이한다`() {
+        val restored = CollectionRun.restore(UUID.randomUUID(), snapshot(), RunTimeline(scheduledAt), RunState(CollectionRunStatus.PENDING))
+
+        assertThat(restored.start(scheduledAt).status).isEqualTo(CollectionRunStatus.RUNNING)
+    }
+
+    @Test
+    fun `상태와 맞지 않는 시각이나 사유로는 복원할 수 없다`() {
+        val started = scheduledAt.plusSeconds(1)
+        val finished = scheduledAt.plusSeconds(2)
+        val invalid =
+            listOf(
+                restoreCase(CollectionRunStatus.PENDING, started = started),
+                restoreCase(CollectionRunStatus.PENDING, finished = finished),
+                restoreCase(CollectionRunStatus.RUNNING),
+                restoreCase(CollectionRunStatus.RUNNING, started = started, finished = finished),
+                restoreCase(CollectionRunStatus.SUCCEEDED, started = started),
+                restoreCase(CollectionRunStatus.SUCCEEDED, started = started, finished = finished, reason = "unexpected"),
+                restoreCase(CollectionRunStatus.FAILED, started = started, finished = finished),
+                restoreCase(CollectionRunStatus.FAILED, started = started, finished = finished, reason = " "),
+                restoreCase(CollectionRunStatus.FAILED, started = started, finished = finished, reason = "x".repeat(1001)),
+                restoreCase(CollectionRunStatus.RUNNING, started = started, reason = "unexpected"),
+            )
+
+        invalid.forEach { restore ->
+            assertThatThrownBy(restore).isInstanceOf(InvalidCollectionConfigurationException::class.java)
+        }
+    }
+
+    @Test
+    fun `시각 순서가 어긋난 실행은 복원할 수 없다`() {
+        val beforeSchedule = restoreCase(CollectionRunStatus.RUNNING, started = scheduledAt.minusNanos(1))
+        val finishBeforeStart =
+            restoreCase(CollectionRunStatus.SUCCEEDED, started = scheduledAt.plusSeconds(2), finished = scheduledAt.plusSeconds(1))
+
+        assertThatThrownBy(beforeSchedule).isInstanceOf(InvalidCollectionConfigurationException::class.java)
+        assertThatThrownBy(finishBeforeStart).isInstanceOf(InvalidCollectionConfigurationException::class.java)
+    }
+
+    private fun restoreCase(
+        status: CollectionRunStatus,
+        started: Instant? = null,
+        finished: Instant? = null,
+        reason: String? = null,
+    ): () -> Unit =
+        {
+            CollectionRun.restore(UUID.randomUUID(), snapshot(), RunTimeline(scheduledAt, started, finished), RunState(status, reason))
+        }
+
+    private fun snapshot() =
+        TaskSnapshot(task.id, task.version, task.definition, SourceSnapshot(source.id, source.definition, source.createdAt))
+
     private fun pending(): CollectionRun =
         CollectionRun.pending(
             UUID.randomUUID(),

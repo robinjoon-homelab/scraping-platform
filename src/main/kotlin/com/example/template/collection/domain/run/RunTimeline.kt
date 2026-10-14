@@ -4,7 +4,7 @@ import com.example.template.collection.domain.validateCollectionConfiguration
 import com.example.template.collection.domain.validateCollectionInstant
 import java.time.Instant
 
-internal data class RunTimeline(
+data class RunTimeline(
     val scheduledFor: Instant,
     val startedAt: Instant? = null,
     val finishedAt: Instant? = null,

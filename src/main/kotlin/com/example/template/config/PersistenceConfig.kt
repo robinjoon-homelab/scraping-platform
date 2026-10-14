@@ -1,7 +1,9 @@
 package com.example.template.config
 
+import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionRunRepository
 import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionTaskRepository
 import com.example.template.collection.adapter.outbound.persistence.ExposedSourceRepository
+import com.example.template.collection.application.port.output.CollectionRunRepository
 import com.example.template.collection.application.port.output.CollectionTaskRepository
 import com.example.template.collection.application.port.output.SourceRepository
 import org.springframework.context.annotation.Bean
@@ -15,4 +17,7 @@ class PersistenceConfig {
 
     @Bean
     fun collectionTaskRepository(jsonMapper: JsonMapper): CollectionTaskRepository = ExposedCollectionTaskRepository(jsonMapper)
+
+    @Bean
+    fun collectionRunRepository(jsonMapper: JsonMapper): CollectionRunRepository = ExposedCollectionRunRepository(jsonMapper)
 }
