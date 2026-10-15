@@ -9,16 +9,28 @@ import com.example.template.collection.domain.run.CollectionRequest
 import com.example.template.collection.domain.run.RecordIdentity
 import com.example.template.collection.domain.run.RecordProvenance
 import com.example.template.collection.domain.task.CollectionTarget
+import org.apache.hc.client5.http.ConnectTimeoutException
+import org.apache.hc.client5.http.classic.methods.HttpGet
+import org.apache.hc.client5.http.config.ConnectionConfig
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient
+import org.apache.hc.client5.http.impl.classic.HttpClients
+import org.apache.hc.client5.http.impl.io.BasicHttpClientConnectionManager
+import org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator
+import org.apache.hc.client5.http.impl.routing.DefaultRoutePlanner
+import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy
+import org.apache.hc.client5.http.ssl.TlsSocketStrategy
+import org.apache.hc.core5.http.HttpHeaders
+import org.apache.hc.core5.http.URIScheme
+import org.apache.hc.core5.http.config.Lookup
+import org.apache.hc.core5.http.config.RegistryBuilder
+import org.apache.hc.core5.util.Timeout
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.json.JsonMapper
+import java.net.InetAddress
+import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URISyntaxException
 import java.net.URLEncoder
-import java.net.http.HttpClient
-import java.net.http.HttpConnectTimeoutException
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-import java.net.http.HttpTimeoutException
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
@@ -32,27 +44,42 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.HexFormat
 import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 // Sends one GET for the task's target and returns the whole JSON response as a single record without a checkpoint.
-// limits.responseTimeout is one deadline for the whole collection: both address checks, connecting, the request and the
-// body all share it, so a slow DNS server cannot hold the worker past it.
+// limits.responseTimeout is one deadline for the whole collection: the address check, connecting, the request and the
+// body all share it, so a slow DNS server cannot hold the worker past it. When the deadline passes the request is
+// aborted, which closes its connection, rather than only abandoned.
 //
 // Every failure is a CollectionConnectorException with a fixed reason, because that message is stored as the run's
 // failure reason. Reasons never name the host, the resolved address, the query, a header value or the body: the host and
 // query are already in the source and task an operator can read, and echoing resolved addresses would let anyone who can
 // define a source map the internal network through failure reasons.
 //
-// SSRF: before the request every address the host resolves to must pass the address policy. HttpClient cannot be
-// pinned to the checked address; it resolves the host again when it connects. That second lookup normally hits the
-// JVM address cache filled by the check (networkaddress.cache.ttl, 30 seconds by default), but a cache entry that
-// expires between the check and the connection lets a rebinding DNS server answer the second lookup with an internal
-// address. The check is therefore repeated after the response arrives, while the address HttpClient used is still
-// cached, and a response from a host that now resolves to a blocked address is discarded. This keeps internal responses
-// out of the stored records but does not stop the request itself from reaching the internal address in that window, and
-// with networkaddress.cache.ttl=0 both checks may see different answers from the connection. Network egress policy is
-// the defense that closes this gap.
+// SSRF: the host is resolved once, and every address it resolves to must pass the address policy. HttpClient then gets a
+// PinnedAddressResolver holding only the first of those addresses, in the order the resolver returned them, so it
+// connects only to a checked address and never asks DNS again; a rebinding DNS server cannot point the connection
+// elsewhere after the check. The original host name is kept for everything else: the Host header comes from the request
+// URI, and the default TLS strategy sends it as SNI and verifies the certificate against it. No proxy is used, not even
+// one configured by system properties, and redirects are not followed, so no other destination is ever contacted.
+//
+// There is no failover to the other addresses. HttpClient tries the next address after any connect or TLS failure,
+// including the one an abort causes by closing the socket, and cancelling the request waits for the connection manager's
+// lock while that next attempt runs. With several addresses an abort would therefore take up to another connectTimeout
+// per address. The JDK HttpClient used before also connected to the first address only.
+//
+// An abort (the deadline, interruption, a body over the limit or a non-2xx status) first closes the exchange's own
+// sockets through ExchangeSockets, and only then cancels the request. A closed socket makes the connecting thread fail
+// and release the manager's lock at once, so the abort does not wait out a connect or TLS timeout, and a socket created
+// after the abort is closed before it can connect.
+//
+// DefaultHttpClientConnectionOperator and DetachedSocketFactory are marked @Internal in HttpClient 5 (checked against
+// 5.6.4 with core 5.4.3). When HttpClient is upgraded, check again that the connection goes only to the pinned address,
+// that no proxy is used, that TLS still verifies the original host name, and that an abort still closes the connection
+// and ends the exchange within the deadline.
 class HttpJsonCollectionConnector(
     private val limits: HttpLimits,
     private val clock: Clock,
@@ -61,14 +88,16 @@ class HttpJsonCollectionConnector(
 ) : CollectionConnectorPort {
     private val resolution = BoundedHostResolver(resolver, MAX_RESOLVER_THREADS)
 
-    // No proxy, so the checked host is the one HttpClient connects to.
-    private val client: HttpClient =
-        HttpClient
-            .newBuilder()
-            .connectTimeout(limits.connectTimeout)
-            .followRedirects(HttpClient.Redirect.NEVER)
-            .proxy(HttpClient.Builder.NO_PROXY)
-            .build()
+    // The exchange runs on its own thread so that the caller can stop at the deadline, or on interruption, and abort it.
+    // An aborted exchange ends as soon as its connection is closed, so these threads do not pile up.
+    private val exchanges: ExecutorService =
+        Executors.newCachedThreadPool(
+            Thread
+                .ofPlatform()
+                .daemon()
+                .name("http-connector-exchange-", 0)
+                .factory(),
+        )
 
     override fun collect(request: CollectionRequest): CollectionBatch {
         val task = request.run.task
@@ -76,42 +105,39 @@ class HttpJsonCollectionConnector(
         val key = recordKey(uri)
         val host = checkNotNull(uri.host)
         val deadline = System.nanoTime() + limits.responseTimeout.toNanos()
-        requirePermittedHost(host, deadline)
-        val response = fetch(uri, deadline)
-        requirePermittedHost(host, deadline)
+        val address = permittedAddresses(host, deadline).first()
+        val response = fetch(uri, PinnedAddressResolver(host, address), deadline)
         return toBatch(request, key, response)
     }
 
-    private fun requirePermittedHost(
+    private fun permittedAddresses(
         host: String,
         deadline: Long,
-    ) {
+    ): List<InetAddress> {
         val addresses = resolution.resolve(host, remaining(deadline))
         if (addresses.isEmpty() || !addresses.all(addressPolicy::permits)) {
             throw CollectionConnectorException("destination address is not allowed")
         }
+        return addresses
     }
 
     private fun fetch(
         uri: URI,
+        pinned: PinnedAddressResolver,
         deadline: Long,
-    ): HttpResponse<ByteArray> {
+    ): FetchedResponse {
         val timeout = remaining(deadline)
         if (!timeout.isPositive) throw CollectionConnectorException("response timed out")
-        val httpRequest =
-            HttpRequest
-                .newBuilder(uri)
-                .GET()
-                .header("Accept", "application/json")
-                .timeout(timeout)
-                .build()
-        val pending = client.sendAsync(httpRequest, BoundedBodySubscriber.handler(limits.maxBodyBytes))
+        val exchange = Exchange(HttpGet(uri).apply { setHeader(HttpHeaders.ACCEPT, "application/json") }, ExchangeSockets())
+        val pending = exchanges.submit<FetchedResponse> { exchange(exchange, pinned, timeout) }
         try {
             return pending.get(timeout.toNanos(), TimeUnit.NANOSECONDS)
         } catch (exception: TimeoutException) {
+            exchange.abort()
             pending.cancel(true)
             throw CollectionConnectorException("response timed out", exception)
         } catch (exception: InterruptedException) {
+            exchange.abort()
             pending.cancel(true)
             throw exception
         } catch (exception: ExecutionException) {
@@ -119,9 +145,51 @@ class HttpJsonCollectionConnector(
         }
     }
 
-    // HttpClient may wrap the subscriber's own reason, so the cause chain is searched for it first. JVM errors anywhere in
-    // the chain and interruption are rethrown as the same instance, because they are not failures of the source: the
-    // worker ends its call and the lease expiry closes the run.
+    private fun exchange(
+        exchange: Exchange,
+        pinned: PinnedAddressResolver,
+        timeout: Duration,
+    ): FetchedResponse =
+        pinnedClient(pinned, exchange.sockets, timeout).use { client ->
+            client.executeOpen(null, exchange.get, null).use { response ->
+                val body = BoundedResponseBody.read(response, limits.maxBodyBytes, exchange::abort)
+                FetchedResponse(body, response.getFirstHeader(HttpHeaders.LAST_MODIFIED)?.value)
+            }
+        }
+
+    // A client per collection keeps the pinned address to this one request: its single connection is closed with it,
+    // so nothing is reused for another host or another collection. Cookies, authentication caching, connection state,
+    // retries, redirects and content decoding are off, so no state carries over and the body limit counts the bytes the
+    // server sent. The socket timeout is only a backstop for a read that outlives an abort.
+    private fun pinnedClient(
+        pinned: PinnedAddressResolver,
+        sockets: ExchangeSockets,
+        timeout: Duration,
+    ): CloseableHttpClient {
+        val manager =
+            BasicHttpClientConnectionManager(DefaultHttpClientConnectionOperator(sockets, null, pinned, tlsStrategies), null)
+        manager.connectionConfig =
+            ConnectionConfig
+                .custom()
+                .setConnectTimeout(Timeout.of(limits.connectTimeout))
+                .setSocketTimeout(Timeout.of(timeout))
+                .build()
+        return HttpClients
+            .custom()
+            .setConnectionManager(manager)
+            .setRoutePlanner(DefaultRoutePlanner(null))
+            .disableRedirectHandling()
+            .disableAutomaticRetries()
+            .disableCookieManagement()
+            .disableAuthCaching()
+            .disableConnectionState()
+            .disableContentCompression()
+            .build()
+    }
+
+    // JVM errors anywhere in the cause chain and interruption are rethrown as the same instance, because they are not
+    // failures of the source: the worker ends its call and the lease expiry closes the run. HttpClient may wrap the
+    // connector's own reason, so the chain is searched for it before the transport failure is named.
     private fun describe(failure: ExecutionException): Throwable {
         val causes = generateSequence(failure.cause) { it.cause }.toList()
         causes.filterIsInstance<Error>().firstOrNull()?.let { return it }
@@ -129,8 +197,8 @@ class HttpJsonCollectionConnector(
         causes.filterIsInstance<CollectionConnectorException>().firstOrNull()?.let { return it }
         val reason =
             when (causes.firstOrNull()) {
-                is HttpConnectTimeoutException -> "connection timed out"
-                is HttpTimeoutException -> "response timed out"
+                is ConnectTimeoutException -> "connection timed out"
+                is SocketTimeoutException -> "response timed out"
                 null -> "HTTP request failed"
                 else -> "HTTP request failed with ${causes.first().javaClass.name}"
             }
@@ -140,12 +208,12 @@ class HttpJsonCollectionConnector(
     private fun toBatch(
         request: CollectionRequest,
         key: String,
-        response: HttpResponse<ByteArray>,
+        response: FetchedResponse,
     ): CollectionBatch {
-        val body = response.body()
+        val body = response.body
         val payload = jsonText(body)
         val provenance =
-            RecordProvenance(request.run.id, request.run.task.source.id, Instant.now(clock), lastModified(response))
+            RecordProvenance(request.run.id, request.run.task.source.id, Instant.now(clock), lastModified(response.lastModified))
         return try {
             val identity = RecordIdentity(key, HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(body)))
             CollectionBatch(request, listOf(CollectedRecord(identity, SCHEMA_VERSION, payload, provenance)))
@@ -182,14 +250,30 @@ class HttpJsonCollectionConnector(
     }
 
     // An unparsable Last-Modified only means the source time is unknown; it never fails the run.
-    private fun lastModified(response: HttpResponse<ByteArray>): Instant? {
-        val value = response.headers().firstValue("Last-Modified").orElse(null) ?: return null
+    private fun lastModified(value: String?): Instant? {
+        if (value == null) return null
         return runCatching { ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant() }
             .onFailure { if (it !is DateTimeException) throw it }
             .getOrNull()
     }
 
     private fun remaining(deadline: Long): Duration = Duration.ofNanos(deadline - System.nanoTime())
+
+    // The sockets are closed before the request is cancelled; the class comment explains why the order matters.
+    private class Exchange(
+        val get: HttpGet,
+        val sockets: ExchangeSockets,
+    ) {
+        fun abort() {
+            sockets.cancel()
+            get.cancel()
+        }
+    }
+
+    private class FetchedResponse(
+        val body: ByteArray,
+        val lastModified: String?,
+    )
 
     private companion object {
         const val SCHEMA_VERSION = "http-json/1"
@@ -201,6 +285,13 @@ class HttpJsonCollectionConnector(
         const val MAX_RECORD_KEY_LENGTH = 2048
         val supportedSchemes = setOf("http", "https")
         val jsonMapper: JsonMapper = JsonMapper.shared()
+
+        // The default strategy uses the JVM trust store and verifies the certificate against the host name it is given.
+        val tlsStrategies: Lookup<TlsSocketStrategy> =
+            RegistryBuilder
+                .create<TlsSocketStrategy>()
+                .register(URIScheme.HTTPS.id, DefaultClientTlsStrategy.createDefault())
+                .build()
 
         // The base URL is checked again here because stored sources predate any connector and the domain only checks
         // the URL's shape. Trailing slashes of the base path are dropped so the resource's leading slash joins it.
