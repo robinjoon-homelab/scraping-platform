@@ -21,6 +21,8 @@ import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 import java.time.Clock
 import java.time.Duration
@@ -29,11 +31,12 @@ import java.time.ZoneOffset
 import java.util.HexFormat
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.LockSupport
+import kotlin.concurrent.thread
 
 class HttpJsonCollectionConnectorTest {
     private val startedAt = Instant.parse("2026-10-05T00:00:00Z")
@@ -41,6 +44,7 @@ class HttpJsonCollectionConnectorTest {
     private val clock = Clock.fixed(collectedAt, ZoneOffset.UTC)
     private val limits = HttpLimits(Duration.ofSeconds(2), Duration.ofSeconds(2), 1_000)
     private val anyAddress = DestinationAddressPolicy { true }
+    private val loopback = InetAddress.getByName("127.0.0.1")
     private val release = CountDownLatch(1)
     private val receivedQueries = ConcurrentHashMap<String, String>()
     private val server =
@@ -122,9 +126,9 @@ class HttpJsonCollectionConnectorTest {
         }
         val connector = HttpJsonCollectionConnector(limits.copy(responseTimeout = Duration.ofMillis(300)), clock, anyAddress)
 
-        assertThatThrownBy { connector.collect(request(baseUrl, "/slow")) }
-            .isInstanceOf(CollectionConnectorException::class.java)
-            .hasMessage("response timed out")
+        val elapsed = measure { assertFailure(connector, request(baseUrl, "/slow"), "response timed out") }
+
+        assertThat(elapsed).isLessThan(Duration.ofSeconds(2))
     }
 
     @ParameterizedTest
@@ -146,15 +150,64 @@ class HttpJsonCollectionConnectorTest {
     }
 
     @Test
-    fun `a host that resolves to a blocked address once the response arrives is discarded`() {
+    fun `the connection goes to the address the check resolved, not to one the system resolver would find`() {
+        respond("/data", 200, """{"pinned":true}""")
+        val pinned = HostResolver { host -> if (host == "pinned.invalid") listOf(loopback) else emptyList() }
+        val onlyLoopback = DestinationAddressPolicy { it == loopback }
+        val connector = HttpJsonCollectionConnector(limits, clock, onlyLoopback, pinned)
+
+        val record = connector.collect(request("http://pinned.invalid:${server.address.port}", "/data")).records.single()
+
+        assertThat(record.payload).isEqualTo("""{"pinned":true}""")
+    }
+
+    @Test
+    fun `an address the check resolved is refused when the policy blocks it`() {
         respond("/data", 200, "{}")
-        val answers = ArrayDeque(listOf(InetAddress.getByName("8.8.8.8"), InetAddress.getLoopbackAddress()))
-        val rebinding = HostResolver { listOf(answers.removeFirst()) }
-        val connector = HttpJsonCollectionConnector(limits, clock, PublicAddressPolicy, rebinding)
+        val connector = HttpJsonCollectionConnector(limits, clock, PublicAddressPolicy) { listOf(loopback) }
+
+        assertFailure(connector, request("http://pinned.invalid:${server.address.port}", "/data"), "destination address is not allowed")
+    }
+
+    // The server listens only on 127.0.0.1, which the URL names and the policy blocks. The check resolves the host to
+    // another loopback address that the policy permits and nothing listens on, so the packets never leave the machine. The
+    // connection must go to that checked address and fail, instead of reaching the server and storing its body.
+    @Test
+    fun `a host checked at one address is never connected at another`() {
+        respond("/data", 200, """{"probe":"loopback-only"}""")
+        val checked = InetAddress.getByName("127.0.0.2")
+        val connector =
+            HttpJsonCollectionConnector(limits.copy(connectTimeout = Duration.ofMillis(300)), clock, { it == checked }) { listOf(checked) }
 
         assertThatThrownBy { connector.collect(request(baseUrl, "/data")) }
             .isInstanceOf(CollectionConnectorException::class.java)
-            .hasMessage("destination address is not allowed")
+            .message()
+            .isIn("connection timed out", "HTTP request failed with org.apache.hc.client5.http.HttpHostConnectException")
+    }
+
+    // The resolver returns the stalled server twice because a second loopback address on the same port is not available on
+    // every machine (127.0.0.2 is not configured on macOS, ::1 is missing where IPv6 is off). A connector that moved on to
+    // the next address after the abort would wait out another connectTimeout on the second attempt.
+    @Test
+    fun `a TLS handshake stalled on the first of several addresses ends at the collection deadline`() {
+        val stalled = ServerSocket(0, 0, loopback)
+        val accepted = CopyOnWriteArrayList<Socket>()
+        thread(isDaemon = true) { runCatching { while (!stalled.isClosed) accepted += stalled.accept() } }
+        val connector =
+            HttpJsonCollectionConnector(HttpLimits(Duration.ofSeconds(3), Duration.ofMillis(300), 1_000), clock, anyAddress) {
+                listOf(loopback, loopback)
+            }
+
+        try {
+            val elapsed =
+                measure { assertFailure(connector, request("https://pinned.invalid:${stalled.localPort}", "/data"), "response timed out") }
+
+            assertThat(elapsed).isLessThan(Duration.ofMillis(1_500))
+            assertThat(lastRead(accepted.single())).isEqualTo(-1)
+        } finally {
+            stalled.close()
+            accepted.forEach(Socket::close)
+        }
     }
 
     @Test
@@ -172,21 +225,19 @@ class HttpJsonCollectionConnectorTest {
     }
 
     @Test
-    fun `the check after the response only gets the time left before the collection deadline`() {
+    fun `the request only gets the time the address check left before the collection deadline`() {
         server.createContext("/slow-headers") { exchange ->
-            Thread.sleep(150)
+            Thread.sleep(200)
             reply(exchange, 200, "{}".toByteArray(), emptyMap())
         }
-        val firstAnswered = AtomicBoolean()
-        val slowSecondLookup =
+        val slowLookup =
             HostResolver {
-                if (firstAnswered.getAndSet(true)) await()
-                listOf(InetAddress.getByName("8.8.8.8"))
+                Thread.sleep(200)
+                listOf(loopback)
             }
-        val connector =
-            HttpJsonCollectionConnector(limits.copy(responseTimeout = Duration.ofMillis(400)), clock, anyAddress, slowSecondLookup)
+        val connector = HttpJsonCollectionConnector(limits.copy(responseTimeout = Duration.ofMillis(300)), clock, anyAddress, slowLookup)
 
-        val elapsed = measure { assertFailure(connector, request(baseUrl, "/slow-headers"), "destination host resolution timed out") }
+        val elapsed = measure { assertFailure(connector, request(baseUrl, "/slow-headers"), "response timed out") }
 
         assertThat(elapsed).isLessThan(Duration.ofSeconds(2))
     }
@@ -217,6 +268,15 @@ class HttpJsonCollectionConnectorTest {
         assertThatThrownBy { connector.collect(request) }
             .isInstanceOf(CollectionConnectorException::class.java)
             .hasMessage(message)
+    }
+
+    // Skips what the client sent, such as a TLS ClientHello, and returns -1 once the client has closed the connection.
+    private fun lastRead(peer: Socket): Int {
+        peer.soTimeout = 1_000
+        val buffer = ByteArray(1_024)
+        var read = peer.getInputStream().read(buffer)
+        while (read > 0) read = peer.getInputStream().read(buffer)
+        return read
     }
 
     // Blocks until the test ends, ignoring interruption like a lookup stuck in the operating system resolver.
