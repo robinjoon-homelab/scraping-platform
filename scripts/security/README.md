@@ -1,0 +1,15 @@
+# Runtime trust mitigation
+
+Apply the four-root removal recommended on 2026-10-24 in [Oracle's runtime guidance](https://ops.java/emudhra) for [CVE-2026-91403](https://www.oracle.com/security-alerts/alert-cve-2026-91403.html) and [CVE-2026-114820](https://www.oracle.com/security-alerts/alert-cve-2026-114820.html).
+
+- Match certificates by DER SHA-256, independent of Temurin/Oracle aliases. Fingerprints come from the [CA repository](https://repository.emsign.com/) and incident publisher's [root certificates](https://emudhra.we-have-a-problem.com/roots.json).
+- Remove matching JRE anchors and Ubuntu CA source files, rebuild the OS bundle, and verify default JSSE, the OS bundle and hashed certificate directory. Already-absent roots are permitted; parse, write, regeneration and verification errors stop the build.
+- Preserve the direct `java -jar /app/application.jar` entrypoint. It does not run Temurin's CA import entrypoint, even with `USE_SYSTEM_CA_CERTS` set. Do not restore affected roots using mounted truststores, extra certificates or JVM truststore overrides. Such overrides require separate validation.
+- Root removal also rejects legitimate chains relying exclusively on those roots, including AAA Certificate Services. Reissue those server chains through an unaffected CA; do not disable TLS or hostname checks.
+- Keep the mitigation when updating Temurin: a version or tag alone does not prove the trust contents are safe. Source changes invalidate the trust build layer; ordinary image and Gradle caches remain enabled.
+
+Run `bash scripts/verify-runtime-image.sh IMAGE` with JDK 25 and Docker after building the `linux/amd64` image. This checks the production entrypoint as UID/GID 10001, all 14 offline compromised TLS chains, idempotent removal, an immutable vulnerable control, and credential-free public HTTPS with default TLS/hostname checks. The probe JAR is mounted only during verification and is not the application.
+
+`roots/*.crt` are the public G1, G2 and ECC G3 certificates downloaded from `https://repository.emsign.com/certs/emSignRootCAG1.crt`, `emSignRootCAG2.crt`, `emSignECCRootCAG3.crt` (DER converted to PEM), and AAA from the incident publisher's `roots.json`. The regression reintroduces each under an unrelated alias, requires verifier failure, and removes it again. It also requires malformed truststores to fail verification.
+
+`chains/*.pem` are public certificate chains from the incident publisher's [chains.zip](https://emudhra.we-have-a-problem.com/chains.zip), downloaded 2026-10-25, SHA-256 `7b949956955fc501a30f4d98d2f513d34c0bbbe92e29a968194c96e097ce2345`. They contain public certificates only, leaf first: six TLS intermediates with emSign and AAA cross-sign paths, plus two chains without Certificate Transparency entries. They do not cover the two code-signing intermediates; removing the four root anchors is the protection for those paths. Validate fixture signatures and historical validity before accepting chain rejection; the vulnerable control must still accept a chain, so expired fixtures cannot silently turn the regression green.

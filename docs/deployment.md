@@ -2,7 +2,7 @@
 
 ## 공용 파일 사용
 
-- 모든 앱에서 [.github/workflows/ci.yml](../.github/workflows/ci.yml), [scripts/deploy.py](../scripts/deploy.py), `scripts/tests`, [Dockerfile](../Dockerfile), `.dockerignore`, Gradle 빌드 구성을 공통으로 유지한다.
+- 모든 앱에서 [.github/workflows/ci.yml](../.github/workflows/ci.yml), [scripts/deploy.py](../scripts/deploy.py), `scripts/tests`, [런타임 신뢰 검증](../scripts/security/README.md)의 `scripts/security`와 `scripts/verify-runtime-image.sh`, [Dockerfile](../Dockerfile), `.dockerignore`, Gradle 빌드 구성을 공통으로 유지한다.
 - 앱별 값은 아래 변수로 지정한다. 기능 추가를 위해 공용 배포 파일을 개별 수정하지 않는다.
 - 기본 구성을 사용할 때는 `.github/deployment.json`을 만들지 않는다.
 - CI 변경 시 PR 소스 커밋 검사를 유지한다. 신뢰하지 않는 PR에 배포 자격 증명을 제공하거나 `pull_request_target`으로 실행하지 않는다.
@@ -33,6 +33,8 @@ GitHub Actions Variables에 다음 값을 설정한다.
 - 앱 JVM에 힙·OOM 옵션을 임의로 추가하거나 하네스 메모리 제한을 바꾸지 않는다.
 - Kubernetes 프로브 연결을 보고할 때는 실제 워크로드 설정을 확인한다.
 - [접근 제어](../README.md#사용-범위)를 구현하기 전에는 공개 앱에 실제 사용자 데이터를 넣지 않는다.
+- 이미지 빌드에서 eMudhra 관련 루트 4종을 JVM·OS 신뢰 저장소에서 제거하고 [런타임 신뢰 검증](../scripts/security/README.md)을 통과시킨다. 사용자 지정 신뢰 저장소나 인증서 마운트는 별도로 검증하며 TLS·호스트명 검증을 끄지 않는다.
+- CI는 PR에서도 `linux/amd64` 앱 이미지를 빌드·검증한다. 배포 작업은 검증된 이미지 아티팩트의 커밋 SHA를 확인한 뒤 같은 이미지를 게시하며 다시 빌드하지 않는다. 템플릿 저장소의 배포 생략과 PR 자격 증명 격리를 유지한다.
 
 ## 배포 없이 검증
 
@@ -43,7 +45,8 @@ APP_NAME=scraping-platform REGISTRY_HOST=registry.homelab.robinjoon.xyz \
   REGISTRY_IMAGE=apps/scraping-platform python3 scripts/deploy.py plan
 python3 -m unittest discover -s scripts/tests -v
 ./gradlew build
-docker build -t scraping-platform:local .
+docker build --platform linux/amd64 --pull -t scraping-platform:local .
+bash scripts/verify-runtime-image.sh scraping-platform:local
 ```
 
 ## 배포 실행과 확인
