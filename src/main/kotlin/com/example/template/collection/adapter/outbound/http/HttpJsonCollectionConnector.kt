@@ -16,7 +16,6 @@ import org.apache.hc.client5.http.impl.classic.CloseableHttpClient
 import org.apache.hc.client5.http.impl.classic.HttpClients
 import org.apache.hc.client5.http.impl.io.BasicHttpClientConnectionManager
 import org.apache.hc.client5.http.impl.io.DefaultHttpClientConnectionOperator
-import org.apache.hc.client5.http.impl.routing.DefaultRoutePlanner
 import org.apache.hc.client5.http.ssl.DefaultClientTlsStrategy
 import org.apache.hc.client5.http.ssl.TlsSocketStrategy
 import org.apache.hc.core5.http.HttpHeaders
@@ -26,7 +25,6 @@ import org.apache.hc.core5.http.config.RegistryBuilder
 import org.apache.hc.core5.util.Timeout
 import tools.jackson.core.JacksonException
 import tools.jackson.databind.json.JsonMapper
-import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URISyntaxException
@@ -59,12 +57,11 @@ import java.util.concurrent.TimeoutException
 // query are already in the source and task an operator can read, and echoing resolved addresses would let anyone who can
 // define a source map the internal network through failure reasons.
 //
-// SSRF: the host is resolved once, and every address it resolves to must pass the address policy. HttpClient then gets a
-// PinnedAddressResolver holding only the first of those addresses, in the order the resolver returned them, so it
-// connects only to a checked address and never asks DNS again; a rebinding DNS server cannot point the connection
-// elsewhere after the check. The original host name is kept for everything else: the Host header comes from the request
-// URI, and the default TLS strategy sends it as SNI and verifies the certificate against it. No proxy is used, not even
-// one configured by system properties, and redirects are not followed, so no other destination is ever contacted.
+// SSRF: every destination address must pass the policy. Direct routes pin the first checked destination address.
+// HTTPS routes use the trusted JVM proxy settings and pin the proxy's first address instead. CONNECT carries the original
+// host name: the proxy, not this client, controls upstream DNS and must enforce public-only destinations itself. The local
+// destination check is retained but cannot prevent rebinding at the proxy. Host, TLS SNI and certificate identity always
+// use the original destination. There is no direct fallback after a proxy failure and redirects are never followed.
 //
 // There is no failover to the other addresses. HttpClient tries the next address after any connect or TLS failure,
 // including the one an abort causes by closing the socket, and cancelling the request waits for the connection manager's
@@ -78,15 +75,22 @@ import java.util.concurrent.TimeoutException
 //
 // DefaultHttpClientConnectionOperator and DetachedSocketFactory are marked @Internal in HttpClient 5 (checked against
 // 5.6.4 with core 5.4.3). When HttpClient is upgraded, check again that the connection goes only to the pinned address,
-// that no proxy is used, that TLS still verifies the original host name, and that an abort still closes the connection
+// that CONNECT uses only the configured proxy, TLS still verifies the original host, and an abort closes the connection
 // and ends the exchange within the deadline.
 class HttpJsonCollectionConnector(
     private val limits: HttpLimits,
     private val clock: Clock,
-    private val addressPolicy: DestinationAddressPolicy,
+    addressPolicy: DestinationAddressPolicy,
     resolver: HostResolver = HostResolver.system,
 ) : CollectionConnectorPort {
-    private val resolution = BoundedHostResolver(resolver, MAX_RESOLVER_THREADS)
+    private val routing = HttpCollectionRouting(BoundedHostResolver(resolver, MAX_RESOLVER_THREADS), addressPolicy)
+
+    // Use JSSE's system default, including javax.net.ssl.trustStore, without replacing hostname verification.
+    private val tlsStrategies: Lookup<TlsSocketStrategy> =
+        RegistryBuilder
+            .create<TlsSocketStrategy>()
+            .register(URIScheme.HTTPS.id, DefaultClientTlsStrategy.createSystemDefault())
+            .build()
 
     // The exchange runs on its own thread so that the caller can stop at the deadline, or on interruption, and abort it.
     // An aborted exchange ends as soon as its connection is closed, so these threads do not pile up.
@@ -103,33 +107,21 @@ class HttpJsonCollectionConnector(
         val task = request.run.task
         val uri = requestUri(task.source.definition.baseUrl, task.definition.target)
         val key = recordKey(uri)
-        val host = checkNotNull(uri.host)
         val deadline = System.nanoTime() + limits.responseTimeout.toNanos()
-        val address = permittedAddresses(host, deadline).first()
-        val response = fetch(uri, PinnedAddressResolver(host, address), deadline)
+        val route = routing.prepare(uri, deadline)
+        val response = fetch(uri, route, deadline)
         return toBatch(request, key, response)
-    }
-
-    private fun permittedAddresses(
-        host: String,
-        deadline: Long,
-    ): List<InetAddress> {
-        val addresses = resolution.resolve(host, remaining(deadline))
-        if (addresses.isEmpty() || !addresses.all(addressPolicy::permits)) {
-            throw CollectionConnectorException("destination address is not allowed")
-        }
-        return addresses
     }
 
     private fun fetch(
         uri: URI,
-        pinned: PinnedAddressResolver,
+        route: HttpCollectionRouting.CheckedRoute,
         deadline: Long,
     ): FetchedResponse {
         val timeout = remaining(deadline)
         if (!timeout.isPositive) throw CollectionConnectorException("response timed out")
         val exchange = Exchange(HttpGet(uri).apply { setHeader(HttpHeaders.ACCEPT, "application/json") }, ExchangeSockets())
-        val pending = exchanges.submit<FetchedResponse> { exchange(exchange, pinned, timeout) }
+        val pending = exchanges.submit<FetchedResponse> { exchange(exchange, route, timeout) }
         try {
             return pending.get(timeout.toNanos(), TimeUnit.NANOSECONDS)
         } catch (exception: TimeoutException) {
@@ -147,10 +139,10 @@ class HttpJsonCollectionConnector(
 
     private fun exchange(
         exchange: Exchange,
-        pinned: PinnedAddressResolver,
+        route: HttpCollectionRouting.CheckedRoute,
         timeout: Duration,
     ): FetchedResponse =
-        pinnedClient(pinned, exchange.sockets, timeout).use { client ->
+        pinnedClient(route, exchange.sockets, timeout).use { client ->
             client.executeOpen(null, exchange.get, null).use { response ->
                 val body = BoundedResponseBody.read(response, limits.maxBodyBytes, exchange::abort)
                 FetchedResponse(body, response.getFirstHeader(HttpHeaders.LAST_MODIFIED)?.value)
@@ -162,12 +154,12 @@ class HttpJsonCollectionConnector(
     // retries, redirects and content decoding are off, so no state carries over and the body limit counts the bytes the
     // server sent. The socket timeout is only a backstop for a read that outlives an abort.
     private fun pinnedClient(
-        pinned: PinnedAddressResolver,
+        route: HttpCollectionRouting.CheckedRoute,
         sockets: ExchangeSockets,
         timeout: Duration,
     ): CloseableHttpClient {
         val manager =
-            BasicHttpClientConnectionManager(DefaultHttpClientConnectionOperator(sockets, null, pinned, tlsStrategies), null)
+            BasicHttpClientConnectionManager(DefaultHttpClientConnectionOperator(sockets, null, route.resolver, tlsStrategies), null)
         manager.connectionConfig =
             ConnectionConfig
                 .custom()
@@ -177,7 +169,7 @@ class HttpJsonCollectionConnector(
         return HttpClients
             .custom()
             .setConnectionManager(manager)
-            .setRoutePlanner(DefaultRoutePlanner(null))
+            .setRoutePlanner { _, _ -> route.route }
             .disableRedirectHandling()
             .disableAutomaticRetries()
             .disableCookieManagement()
@@ -285,13 +277,6 @@ class HttpJsonCollectionConnector(
         const val MAX_RECORD_KEY_LENGTH = 2048
         val supportedSchemes = setOf("http", "https")
         val jsonMapper: JsonMapper = JsonMapper.shared()
-
-        // The default strategy uses the JVM trust store and verifies the certificate against the host name it is given.
-        val tlsStrategies: Lookup<TlsSocketStrategy> =
-            RegistryBuilder
-                .create<TlsSocketStrategy>()
-                .register(URIScheme.HTTPS.id, DefaultClientTlsStrategy.createDefault())
-                .build()
 
         // The base URL is checked again here because stored sources predate any connector and the domain only checks
         // the URL's shape. Trailing slashes of the base path are dropped so the resource's leading slash joins it.

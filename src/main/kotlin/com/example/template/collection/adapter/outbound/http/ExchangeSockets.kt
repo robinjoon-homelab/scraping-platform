@@ -16,7 +16,8 @@ import kotlin.concurrent.withLock
 // closes every socket already created, which ends a blocked connect, TLS handshake or read at once and lets the
 // connecting thread release the manager's lock.
 //
-// Sockets bypass the JVM's default proxy selector, which would otherwise apply socksProxyHost.
+// Raw sockets bypass implicit SOCKS selection. HTTP CONNECT is handled by the fixed HttpClient route, whose TCP
+// endpoint is the proxy itself; Socket(NO_PROXY) does not bypass that route or change cancellation ownership.
 internal class ExchangeSockets : DetachedSocketFactory {
     private val lock = ReentrantLock()
     private val sockets = mutableListOf<Socket>()
