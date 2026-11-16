@@ -9,7 +9,7 @@ import java.util.UUID
 // live is the adapter's choice; callers rely only on the rules below.
 interface CollectedRecordStore {
     /**
-     * Stores the records whose (source, source record key, revision hash) is not stored yet and returns how many were
+     * Stores the records whose (run plan, source, source record key, revision hash) is not stored yet and returns how many were
      * stored. A repeated content version is ignored without error, so the stored run is the run that first observed it.
      * Safe against a concurrent store of the same version.
      */

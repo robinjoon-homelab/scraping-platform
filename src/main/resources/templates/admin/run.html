@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('실행 상세')}"></head>
+<body th:replace="~{ui/layout :: shell('plans', ~{::content})}">
+<section th:fragment="content" class="app-stack">
+<p class="app-eyebrow">COLLECTION / OPERATIONS</p>
+<h1>실행 상세</h1>
+<p th:replace="~{ui/layout :: notice(${notice}, false)}"></p>
+<p th:replace="~{ui/layout :: notice(${noticeError}, true)}"></p>
+<a th:href="@{/admin/plans/{id}/runs(id=${planId})}">실행 이력</a><section class="ui-panel app-stack"><h2 th:text="${run.status}"></h2><p th:text="${run.id}"></p><dl><dt>예정 UTC</dt><dd th:text="${run.scheduled}"></dd><dt>시작 UTC</dt><dd th:text="${run.started}"></dd><dt>종료 UTC</dt><dd th:text="${run.finished}"></dd><dt>오류</dt><dd th:text="${run.error}"></dd></dl></section>
+<h2>처음 관측한 레코드</h2><p class="ui-muted">같은 내용의 반복 관측은 새 레코드 수에 포함되지 않습니다.</p><p th:if="${#lists.isEmpty(records)}">저장한 새 레코드가 없습니다. 대기·실행 중이거나 내용 변경이 없을 수 있습니다.</p>
+<section th:each="record : ${records}" class="ui-panel app-stack"><a th:href="@{/admin/records/{id}(id=${record.id})}" th:text="${record.key}"></a><p th:text="${record.hash}"></p><p><span th:text="${record.bytes}"></span> 바이트</p></section><nav class="app-actions" aria-label="목록 페이지"><a th:if="${offset > 0}" th:href="@{/admin/runs/{id}(id=${run.id},offset=${T(java.lang.Math).max(0, offset - 20)})}">이전 20개</a><a th:if="${#lists.size(records) == 20}" th:href="@{/admin/runs/{id}(id=${run.id},offset=${offset + 20})}">다음 20개</a></nav>
+</section></body></html>

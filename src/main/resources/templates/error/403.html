@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('접근 권한이 없습니다')}"></head>
+<body>
+<main th:replace="~{ui/layout :: errorPage('403', '접근 권한이 없습니다', '이 화면을 볼 수 있는 권한이 없습니다.')}"></main>
+</body>
+</html>

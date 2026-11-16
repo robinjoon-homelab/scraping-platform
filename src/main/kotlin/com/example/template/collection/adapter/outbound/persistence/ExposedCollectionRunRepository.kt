@@ -110,6 +110,19 @@ class ExposedCollectionRunRepository(
         leaseUntil: Instant,
     ): CollectionRun? {
         require(run.status == CollectionRunStatus.RUNNING) { "only a running run can take a lease" }
+        CollectionTasksTable
+            .selectAll()
+            .where { CollectionTasksTable.id eq run.task.taskId }
+            .forUpdate()
+            .single()
+        val occupied =
+            CollectionRunsTable
+                .selectAll()
+                .where {
+                    (CollectionRunsTable.taskId eq run.task.taskId) and (CollectionRunsTable.status eq "RUNNING")
+                }.limit(1)
+                .any()
+        if (occupied) return null
         return updateWhileStatus(run, CollectionRunStatus.PENDING) {
             it[CollectionRunsTable.leaseUntil] = leaseUntil.toStoredTime()
         }

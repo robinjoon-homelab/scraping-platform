@@ -63,3 +63,8 @@ bash scripts/verify-runtime-image.sh scraping-platform:local
 - `env`에는 **교체할 전체 목록**을 쓰고 prod·DB 설정을 포함한다. URL의 DB명은 `database`와 맞추며, `DB_HOST`는 설정하지 않고 `DB_PORT`는 이를 참조하는 URL보다 먼저 선언한다.
 - 비밀값은 `secretKeyRef`로 지정한다. 참조할 Secret·ServiceAccount를 먼저 준비하고 `plan`으로 최종 설정을 확인한다.
 - 이 앱은 [deployment.json](../.github/deployment.json)으로 DB `scraping_platform`·도메인 `scraping-platform.homelab.robinjoon.xyz`·전체 prod/DB 환경변수와 `SCRAPING_API_TOKEN`을 지정한다. 워크로드 namespace의 Secret `scraping-platform-runtime`, key `api-token`을 준비한다. helper는 비밀값을 조회·생성하지 않는다. 기존 워크로드에는 이 파일이 재적용되지 않으며 토큰 미설정 API는 503으로 닫힌다.
+
+## 관리자 화면 자격
+
+- 런타임 Secret을 통해 `ADMIN_USERNAME`, `ADMIN_PASSWORD`를 제공한다. 기본 계정은 없으며 어느 하나라도 없으면 관리자 화면과 `/docs/**`는 403이다. `ADMIN_PASSWORD`는 `{bcrypt}` 해시를 권장한다. 정확한 평문 길이·잠금·세션 정책은 [관리자 자격](frontend.md#관리자-자격과-닫힘-동작)을 따른다.
+- 기존 워크로드 환경변수는 이 코드 변경으로 반영되지 않는다. 운영 환경변수·하네스·배포는 이번 작업에서 변경하지 않는다. 컨테이너 포트 8080을 유지한다. 운영 HTTPS 뒤 로그인·폼 제출 확인은 배포 담당자가 수행한다.

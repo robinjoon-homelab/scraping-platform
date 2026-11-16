@@ -14,6 +14,7 @@ interface CollectionTaskRepository {
         limit: Int,
     ): List<CollectionTask>
 
+    // Accepted changes close pending runs and invalidate progress when the source or target changes.
     fun update(
         task: CollectionTask,
         expectedVersion: Long,

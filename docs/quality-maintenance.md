@@ -86,3 +86,8 @@ detekt는 분석 전에 컴파일된 규칙 JAR를 플러그인으로 읽으므�
 - 정상 fixture는 해당 `all()`을 통과해야 한다. 위반 fixture는 정확한 클래스를 찾고, 기대 규칙이 `all()`에 포함되어 실제로 실패하는지 확인한다.
 - 한 BC의 여러 루트와 독립 BC에 공통·DDD·BC 검사를 함께 적용한다. ID 참조 허용 사례는 value class 소거로 빈 검사가 되지 않게 실제 바이트코드 의존을 단언한다.
 - 루트 밖 클래스 위치, 고립된 순환, 직접·합성·상속 트랜잭션, 데이터 계약, Kotlin 생성 멤버를 회귀 사례로 유지한다.
+
+## UI 검사기
+
+- 공용 UI 키트는 [화면 지침](frontend.md#검사-규칙)의 원본·렌더링·해시 검사를 유지한다. 앱에서 매니페스트를 재생성해 변경을 숨기지 않는다. `scripts/sync-ui-kit.py --source <템플릿>`으로만 갱신한다.
+- `uiCheck`는 `check`에 연결하며 고정 Node·pnpm을 사용한다. 렌더링 결과가 없으면 실패해야 한다. 키트 갱신은 `python3 -m unittest discover -s scripts/tests -p test_sync_ui_kit.py`도 실행한다.

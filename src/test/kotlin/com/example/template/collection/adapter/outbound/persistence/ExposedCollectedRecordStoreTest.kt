@@ -89,6 +89,19 @@ class ExposedCollectedRecordStoreTest {
     }
 
     @Test
+    fun `the same source content is retained independently for each plan`() {
+        val first = database.seedRun()
+        val other = database.seedRun()
+        database.execute("UPDATE collection_tasks SET source_id='${first.sourceId}' WHERE id='${other.taskId}'")
+        database.execute("UPDATE collection_runs SET source_id='${first.sourceId}' WHERE id='${other.runId}'")
+        val second = SeededRun(first.sourceId, other.taskId, other.runId)
+        val stored = inTransaction { store.saveNew(listOf(record(first, "/same"), record(second, "/same"))) }
+        assertThat(stored).isEqualTo(2)
+        assertThat(rowsOf(first)).hasSize(1)
+        assertThat(rowsOf(second)).hasSize(1)
+    }
+
+    @Test
     fun `a run lists the records it stored first by collection time without their payload`() {
         val run = database.seedRun()
         val laterRun = database.seedRun(sameTaskAs = run)

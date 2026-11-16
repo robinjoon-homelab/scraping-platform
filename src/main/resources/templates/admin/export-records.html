@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('공개 레코드')}"></head>
+<body th:replace="~{ui/layout :: shell('plans', ~{::content})}">
+<section th:fragment="content" class="app-stack">
+<p class="app-eyebrow">COLLECTION / OPERATIONS</p>
+<h1>공개 레코드</h1>
+<p th:replace="~{ui/layout :: notice(${notice}, false)}"></p>
+<p th:replace="~{ui/layout :: notice(${noticeError}, true)}"></p>
+<a th:href="@{/admin/plans/{id}/export(id=${planId})}">내보내기 관리</a><p th:if="${#lists.isEmpty(records)}">이 위치 뒤의 공개 레코드가 없습니다. 수집 실행 결과를 확인하세요.</p><section th:each="record, iter : ${records}" class="ui-panel app-stack"><h2>공개 위치 <span th:text="${positions[iter.index]}"></span></h2><p>계획 버전 <span th:text="${revisions[iter.index]}"></span></p><a th:href="@{/admin/records/{id}(id=${record.id})}" th:text="${record.key}"></a><p th:text="${record.hash}"></p><p th:each="line : ${record.provenance}" th:text="${line}"></p></section><p>다음 이어받기 after=<span th:text="${nextAfter}"></span></p><a th:if="${!#lists.isEmpty(records)}" th:href="@{/admin/plans/{id}/export/records(id=${planId},after=${nextAfter})}">이 위치부터 다음 20개</a>
+</section></body></html>

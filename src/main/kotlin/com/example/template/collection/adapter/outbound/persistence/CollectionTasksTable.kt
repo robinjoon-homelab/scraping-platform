@@ -13,6 +13,7 @@ internal object CollectionTasksTable : Table("collection_tasks") {
     val everySeconds = long("every_seconds")
     val anchorAt = timestampWithTimeZone("anchor_at")
     val enabled = bool("enabled")
+    val resumeFloor = long("resume_floor").default(0)
     val version = long("version")
     val createdAt = timestampWithTimeZone("created_at")
     val nextRunAt = timestampWithTimeZone("next_run_at").nullable()

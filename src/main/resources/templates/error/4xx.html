@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('요청을 처리할 수 없습니다')}"></head>
+<body>
+<main th:replace="~{ui/layout :: errorPage(${status}, '요청을 처리할 수 없습니다', '입력한 주소나 값을 확인한 뒤 다시 시도해 주세요.')}"></main>
+</body>
+</html>

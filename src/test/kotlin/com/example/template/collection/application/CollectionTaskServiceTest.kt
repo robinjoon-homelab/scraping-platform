@@ -122,6 +122,7 @@ class CollectionTaskServiceTest {
     fun `enabling schedules the next slot after the clock time and disabling clears it`() {
         val original = task()
         val enabledTask = original.changeEnabled(true, now)
+        every { sources.findById(source.id) } returns source
         every { repository.findById(original.id) } returns original andThen enabledTask
         every { repository.update(any(), any()) } answers { firstArg() }
 
@@ -134,6 +135,19 @@ class CollectionTaskServiceTest {
         assertThat(disabled.nextRunAt).isNull()
         assertThat(disabled.version).isEqualTo(2)
         assertThat(disabled.definition).isEqualTo(original.definition)
+    }
+
+    @Test
+    fun `unsupported kinds and credential authentication cannot be enabled`() {
+        val original = task()
+        every { repository.findById(original.id) } returns original
+        val definitions = listOf(source.definition.copy(kind = SourceKind.HTML), source.definition.copy(credentialRef = "secret-ref"))
+        definitions.forEach { definition ->
+            every { sources.findById(source.id) } returns Source.create(source.id, definition, now)
+            assertThatThrownBy { service.setEnabled(original.id, 0, true) }
+                .isInstanceOf(com.example.template.collection.domain.InvalidCollectionConfigurationException::class.java)
+                .hasMessageContaining("source.")
+        }
     }
 
     @Test

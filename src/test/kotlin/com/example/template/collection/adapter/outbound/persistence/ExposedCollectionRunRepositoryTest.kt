@@ -139,6 +139,19 @@ class ExposedCollectionRunRepositoryTest {
     }
 
     @Test
+    fun `a plan starts its next pending run only after the running lease is closed`() {
+        val snapshot = seedSnapshot()
+        val first = inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt)) }
+        val second = inTransaction { repository.insert(CollectionRun.pending(UUID.randomUUID(), snapshot, scheduledAt.plusSeconds(1))) }
+        val start = scheduledAt.plusSeconds(10)
+        val running = requireNotNull(inTransaction { repository.updateStarted(first.start(start), start.plusSeconds(300)) })
+        assertThat(inTransaction { repository.updateStarted(second.start(start), start.plusSeconds(300)) }).isNull()
+        inTransaction { repository.update(running.succeed(start.plusSeconds(1)), CollectionRunStatus.RUNNING) }
+        assertThat(inTransaction { repository.updateStarted(second.start(start.plusSeconds(2)), start.plusSeconds(300)) }?.status)
+            .isEqualTo(CollectionRunStatus.RUNNING)
+    }
+
+    @Test
     fun `pending runs are found once due, earliest scheduled first, up to the limit`() {
         val later = insertPending(scheduledAt.plusSeconds(120))
         val earliest = insertPending(scheduledAt)

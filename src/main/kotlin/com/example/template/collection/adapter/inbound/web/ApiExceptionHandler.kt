@@ -1,6 +1,7 @@
 package com.example.template.collection.adapter.inbound.web
 
 import com.example.template.collection.application.port.input.CollectedRecordNotFoundException
+import com.example.template.collection.application.port.input.CollectionPreviewFailedException
 import com.example.template.collection.application.port.input.CollectionRunNotFoundException
 import com.example.template.collection.application.port.input.CollectionTaskNotFoundException
 import com.example.template.collection.application.port.input.SourceNotFoundException
@@ -14,6 +15,10 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 @RestControllerAdvice
 class ApiExceptionHandler : ResponseEntityExceptionHandler() {
+    @ExceptionHandler(CollectionPreviewFailedException::class)
+    fun handleConnectorFailure(exception: CollectionPreviewFailedException): ProblemDetail =
+        ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, requireNotNull(exception.message))
+
     @ExceptionHandler(InvalidCollectionConfigurationException::class)
     fun handleInvalidConfiguration(exception: InvalidCollectionConfigurationException): ProblemDetail =
         ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, requireNotNull(exception.message)).apply {

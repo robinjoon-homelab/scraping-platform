@@ -63,13 +63,22 @@ class ExposedCollectionTaskRepository(
         task: CollectionTask,
         expectedVersion: Long,
     ): CollectionTask? {
+        val previous = findById(task.id) ?: return null
+        val targetChanged = previous.definition.sourceId != task.definition.sourceId || previous.definition.target != task.definition.target
         val updated =
             CollectionTasksTable.update({
                 (CollectionTasksTable.id eq task.id) and (CollectionTasksTable.version eq expectedVersion)
             }) {
                 writeTask(it, task)
+                if (targetChanged) it[CollectionTasksTable.resumeFloor] = task.version
             }
         if (updated == 0) return null
+        CollectionRunsTable.update({ (CollectionRunsTable.taskId eq task.id) and (CollectionRunsTable.status eq "PENDING") }) {
+            it[status] = "FAILED"
+            it[startedAt] = java.time.OffsetDateTime.now(ZoneOffset.UTC)
+            it[finishedAt] = java.time.OffsetDateTime.now(ZoneOffset.UTC)
+            it[failureReason] = "plan changed or stopped before execution"
+        }
         return CollectionTasksTable
             .selectAll()
             .where { CollectionTasksTable.id eq task.id }

@@ -1,0 +1,11 @@
+/*
+ * App-owned theme overrides for scraping-platform.
+ * Override only :root custom properties and color-scheme here; keep UI kit tokens in ui/tokens.css untouched.
+ */
+:root {
+    color-scheme: light dark;
+
+    --ui-accent: light-dark(#0f766e, #5eead4);
+    --ui-on-accent: light-dark(#fff, #062d2a);
+    --ui-focus: light-dark(#0f766e, #99f6e4);
+}

@@ -7,8 +7,11 @@ import com.example.template.collection.domain.task.TaskDefinition
 import com.example.template.collection.domain.task.TaskRevision
 import com.example.template.collection.domain.task.TaskTimeline
 import com.example.template.support.persistence.MigratedH2Database
+import com.example.template.support.persistence.seedRun
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
@@ -66,6 +69,32 @@ class ExposedCollectionTaskRepositoryTest {
         assertThat(saved.definition.schedule.anchorAt).isEqualTo(Instant.parse("2026-02-01T00:00:00.987654Z"))
         assertThat(saved.version).isEqualTo(1)
         assertThat(saved.createdAt).isEqualTo(original.createdAt)
+    }
+
+    @Test
+    fun `stopping closes pending work and only semantic changes advance the resume boundary`() {
+        val seed = database.seedRun()
+        database.execute("UPDATE collection_runs SET status='PENDING', started_at=NULL WHERE id='${seed.runId}'")
+        val original = requireNotNull(inTransaction { repository.findById(seed.taskId) })
+        val stopped = requireNotNull(inTransaction { repository.update(original.changeEnabled(false, now), 0) })
+        inTransaction {
+            assertThat(CollectionRunsTable.selectAll().where { CollectionRunsTable.id eq seed.runId }.single()[CollectionRunsTable.status])
+                .isEqualTo("FAILED")
+            assertThat(
+                CollectionTasksTable
+                    .selectAll()
+                    .where {
+                        CollectionTasksTable.id eq seed.taskId
+                    }.single()[CollectionTasksTable.resumeFloor],
+            ).isZero()
+        }
+        val changed = stopped.revise(stopped.definition.copy(target = CollectionTarget("/different")), now)
+        inTransaction { repository.update(changed, 1) }
+        assertThat(
+            inTransaction {
+                CollectionTasksTable.selectAll().where { CollectionTasksTable.id eq seed.taskId }.single()[CollectionTasksTable.resumeFloor]
+            },
+        ).isEqualTo(2)
     }
 
     @Test

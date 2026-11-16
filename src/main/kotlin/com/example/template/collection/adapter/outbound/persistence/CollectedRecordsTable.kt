@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.javatime.timestampWithTimeZone
 
 internal object CollectedRecordsTable : Table("collected_records") {
     val id = javaUUID("id")
+    val taskId = javaUUID("task_id").references(CollectionTasksTable.id)
     val sourceId = javaUUID("source_id").references(SourcesTable.id)
     val runId = javaUUID("run_id").references(CollectionRunsTable.id)
     val sourceRecordKey = varchar("source_record_key", 2048)

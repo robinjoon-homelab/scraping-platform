@@ -31,6 +31,12 @@ class ExposedCollectedRecordStore : CollectedRecordStore {
             CollectedRecordsTable
                 .insertIgnore {
                     it[id] = UUID.randomUUID()
+                    it[taskId] =
+                        CollectionRunsTable
+                            .selectAll()
+                            .where {
+                                CollectionRunsTable.id eq record.provenance.runId
+                            }.single()[CollectionRunsTable.taskId]
                     it[sourceId] = record.provenance.sourceId
                     it[runId] = record.provenance.runId
                     it[sourceRecordKey] = record.identity.sourceRecordKey

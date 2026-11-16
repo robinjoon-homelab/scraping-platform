@@ -1,0 +1,324 @@
+/* Component styles of the UI kit. Colors and fonts come only from --ui-* tokens. */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    font-family: var(--ui-font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+}
+
+h1 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.3;
+}
+
+h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.3;
+}
+
+p {
+    margin: 0;
+}
+
+a {
+    color: var(--ui-accent);
+}
+
+:focus-visible {
+    outline: 2px solid var(--ui-focus);
+    outline-offset: 2px;
+}
+
+.ui-shell {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    min-height: 100vh;
+}
+
+.ui-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 24px 16px;
+    border-right: 1px solid var(--ui-line);
+    background: var(--ui-surface);
+}
+
+.ui-sidebar nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ui-sidebar form {
+    margin-top: auto;
+}
+
+.ui-main {
+    min-width: 0;
+    padding: 32px;
+}
+
+.ui-main section {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.ui-brand {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.ui-nav-link {
+    display: block;
+    padding: 8px 12px;
+    border-radius: var(--ui-radius);
+    color: var(--ui-text);
+    text-decoration: none;
+}
+
+.ui-nav-link:hover {
+    background: var(--ui-hover);
+}
+
+.ui-nav-link[aria-current="page"] {
+    background: var(--ui-hover);
+    color: var(--ui-accent);
+    font-weight: 600;
+}
+
+.ui-page-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.ui-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ui-panel {
+    display: grid;
+    gap: 16px;
+    padding: 24px;
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+}
+
+.ui-panel form {
+    display: grid;
+    gap: 16px;
+}
+
+.ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ui-button:hover {
+    background: var(--ui-hover);
+}
+
+.ui-button-primary,
+.ui-button-primary:hover {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+}
+
+.ui-button-danger,
+.ui-button-danger:hover {
+    border-color: var(--ui-danger-text);
+    background: var(--ui-danger-bg);
+    color: var(--ui-danger-text);
+}
+
+.ui-button-primary:hover,
+.ui-button-danger:hover {
+    filter: brightness(0.95);
+}
+
+.ui-field {
+    display: grid;
+    gap: 4px;
+}
+
+.ui-field label {
+    font-weight: 600;
+}
+
+.ui-input {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius);
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    font: inherit;
+}
+
+.ui-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+}
+
+.ui-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ui-table caption {
+    padding: 12px;
+    color: var(--ui-text-muted);
+    text-align: left;
+}
+
+.ui-table th,
+.ui-table td {
+    padding: 12px;
+    border-top: 1px solid var(--ui-line);
+    text-align: left;
+}
+
+.ui-table th {
+    color: var(--ui-text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ui-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--ui-radius);
+    background: var(--ui-hover);
+    color: var(--ui-text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ui-badge-success {
+    background: var(--ui-success-bg);
+    color: var(--ui-success-text);
+}
+
+.ui-badge-warning {
+    background: var(--ui-warning-bg);
+    color: var(--ui-warning-text);
+}
+
+.ui-badge-danger {
+    background: var(--ui-danger-bg);
+    color: var(--ui-danger-text);
+}
+
+.ui-notice {
+    padding: 12px 16px;
+    border: 1px solid var(--ui-line);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+}
+
+.ui-notice-error {
+    border-color: var(--ui-danger-text);
+    background: var(--ui-danger-bg);
+    color: var(--ui-danger-text);
+}
+
+.ui-empty {
+    display: grid;
+    gap: 4px;
+    padding: 48px 16px;
+    color: var(--ui-text-muted);
+    text-align: center;
+}
+
+.ui-empty strong {
+    color: var(--ui-text);
+}
+
+.ui-muted {
+    color: var(--ui-text-muted);
+}
+
+.ui-auth {
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+    padding: 16px;
+}
+
+.ui-auth .ui-panel {
+    width: min(100%, 360px);
+}
+
+.ui-error {
+    display: grid;
+    place-content: center;
+    gap: 8px;
+    min-height: 100vh;
+    padding: 16px;
+    text-align: center;
+}
+
+/* The sidebar turns into a menu above the content; it wraps instead of needing a JS toggle. */
+@media (width <= 768px) {
+    .ui-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto 1fr;
+    }
+
+    .ui-sidebar {
+        flex-flow: row wrap;
+        align-items: center;
+        gap: 8px 16px;
+        padding: 12px 16px;
+        border-right: 0;
+        border-bottom: 1px solid var(--ui-line);
+    }
+
+    .ui-sidebar nav {
+        flex-flow: row wrap;
+    }
+
+    .ui-sidebar form {
+        margin-top: 0;
+        margin-left: auto;
+    }
+
+    .ui-main {
+        padding: 16px;
+    }
+}

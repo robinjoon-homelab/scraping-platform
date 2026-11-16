@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('공용 컴포넌트')}"></head>
+<body th:replace="~{ui/layout :: shell('plans', ~{::section})}">
+<section>
+    <div class="ui-page-head">
+        <h1>공용 컴포넌트</h1>
+        <div class="ui-toolbar">
+            <button class="ui-button" type="button">기본</button>
+            <button class="ui-button ui-button-primary" type="button">저장</button>
+            <button class="ui-button ui-button-danger" type="button">삭제</button>
+        </div>
+    </div>
+
+    <p th:replace="~{ui/layout :: notice('저장했습니다.', false)}"></p>
+    <p th:replace="~{ui/layout :: notice('저장하지 못했습니다.', true)}"></p>
+
+    <div class="ui-panel">
+        <h2>입력</h2>
+        <div class="ui-field">
+            <label for="preview-title">제목</label>
+            <input class="ui-input" id="preview-title" name="title" type="text">
+        </div>
+        <p class="ui-muted">
+            <span th:replace="~{ui/layout :: badge('완료', 'success')}"></span>
+            <span th:replace="~{ui/layout :: badge('대기', 'warning')}"></span>
+            <span th:replace="~{ui/layout :: badge('실패', 'danger')}"></span>
+        </p>
+    </div>
+
+    <div class="ui-table-wrap">
+        <table class="ui-table">
+            <caption>할 일 목록</caption>
+            <thead>
+            <tr>
+                <th scope="col">번호</th>
+                <th scope="col">아주 긴 열 제목으로 표 안에서만 가로 스크롤이 생기는지 확인합니다</th>
+                <th scope="col">담당자의 전체 이름과 소속 부서를 함께 표시하는 열입니다</th>
+                <th scope="col">상태</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>1</td>
+                <td>첫 번째 항목</td>
+                <td>운영팀</td>
+                <td><span th:replace="~{ui/layout :: badge('완료', 'success')}"></span></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div th:replace="~{ui/layout :: emptyState('항목이 없습니다', '새 항목을 추가하면 여기에 표시됩니다.')}"></div>
+</section>
+</body>
+</html>

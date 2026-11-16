@@ -6,6 +6,7 @@ import com.example.template.collection.application.port.input.SourceNotFoundExce
 import com.example.template.collection.application.port.input.StaleTaskVersionException
 import com.example.template.collection.application.port.output.CollectionTaskRepository
 import com.example.template.collection.application.port.output.SourceRepository
+import com.example.template.collection.domain.source.CollectorSupport
 import com.example.template.collection.domain.task.CollectionTask
 import com.example.template.collection.domain.task.TaskDefinition
 import com.example.template.collection.domain.validateCollectionConfiguration
@@ -50,6 +51,7 @@ class CollectionTaskService(
     ): CollectionTask {
         val current = getAtVersion(id, expectedVersion)
         requireSource(definition.sourceId)
+        if (current.enabled) requireExecutable(definition.sourceId)
         val revised = current.revise(definition, Instant.now(clock))
         return update(revised, expectedVersion)
     }
@@ -59,7 +61,16 @@ class CollectionTaskService(
         id: UUID,
         expectedVersion: Long,
         enabled: Boolean,
-    ): CollectionTask = update(getAtVersion(id, expectedVersion).changeEnabled(enabled, Instant.now(clock)), expectedVersion)
+    ): CollectionTask {
+        val current = getAtVersion(id, expectedVersion)
+        if (enabled) requireExecutable(current.definition.sourceId)
+        return update(current.changeEnabled(enabled, Instant.now(clock)), expectedVersion)
+    }
+
+    private fun requireExecutable(sourceId: UUID) {
+        val source = sources.findById(sourceId) ?: throw SourceNotFoundException(sourceId)
+        CollectorSupport.requireExecutable(source.definition)
+    }
 
     private fun getAtVersion(
         id: UUID,

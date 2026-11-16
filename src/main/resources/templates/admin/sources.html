@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('출처 관리')}"></head>
+<body th:replace="~{ui/layout :: shell('sources', ~{::content})}">
+<section th:fragment="content" class="app-stack">
+<p class="app-eyebrow">COLLECTION / OPERATIONS</p>
+<h1>출처 관리</h1>
+<p th:replace="~{ui/layout :: notice(${notice}, false)}"></p>
+<p th:replace="~{ui/layout :: notice(${noticeError}, true)}"></p>
+<p class="ui-muted">현재 공개 HTTP JSON만 실행할 수 있습니다. 인증이 필요한 원천, RSS, HTML은 지원하지 않습니다.</p>
+<section class="ui-panel app-stack"><h2>새 출처</h2><form th:action="@{/admin/sources}" method="post" class="app-stack"><div class="ui-field"><label for="name">출처 이름</label><input class="ui-input" id="name" name="name" type="text" maxlength="200" required></div><div class="ui-field"><label for="baseUrl">기본 주소</label><input class="ui-input" id="baseUrl" name="baseUrl" type="url" maxlength="2048" placeholder="https://example.org" required></div><button type="submit" class="ui-button ui-button-primary">출처 등록</button></form></section>
+<th:block th:if="${#lists.isEmpty(sources)}"><div th:replace="~{ui/layout :: emptyState('등록한 출처가 없습니다', '출처를 등록한 다음 수집 계획을 만드세요.')}"></div></th:block>
+<section th:each="source : ${sources}" class="ui-panel app-stack"><h2 th:text="${source.name}"></h2><p th:text="${source.baseUrl}"></p><p th:text="${source.kind}"></p><a th:href="@{/admin/plans/new(sourceId=${source.id})}">이 출처로 계획 만들기</a></section><nav class="app-actions" aria-label="목록 페이지"><a th:if="${offset > 0}" th:href="@{/admin/sources(offset=${T(java.lang.Math).max(0, offset - 20)})}">이전 20개</a><a th:if="${#lists.size(sources) == 20}" th:href="@{/admin/sources(offset=${offset + 20})}">다음 20개</a></nav>
+</section></body></html>

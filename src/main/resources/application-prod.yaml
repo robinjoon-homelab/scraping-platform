@@ -11,3 +11,10 @@ management:
       group:
         readiness:
           include: readinessState,db
+
+server:
+  forward-headers-strategy: native
+  servlet:
+    session:
+      cookie:
+        secure: true

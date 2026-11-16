@@ -1,6 +1,13 @@
 package com.example.template.collection.adapter.outbound.persistence
 
 import com.example.template.collection.domain.run.Checkpoint
+import com.example.template.collection.domain.run.SourceSnapshot
+import com.example.template.collection.domain.run.TaskSnapshot
+import com.example.template.collection.domain.source.SourceDefinition
+import com.example.template.collection.domain.source.SourceKind
+import com.example.template.collection.domain.task.CollectionTarget
+import com.example.template.collection.domain.task.IntervalSchedule
+import com.example.template.collection.domain.task.TaskDefinition
 import com.example.template.support.persistence.MigratedH2Database
 import com.example.template.support.persistence.seedRun
 import org.assertj.core.api.Assertions.assertThat
@@ -51,6 +58,23 @@ class ExposedCheckpointStoreTest {
         inTransaction { store.save(Checkpoint(run.taskId, 1, "stale"), run.runId, at) }
 
         assertThat(inTransaction { store.find(run.taskId) }).isEqualTo(Checkpoint(run.taskId, 2, "version-2"))
+    }
+
+    @Test
+    fun `target compatibility survives metadata changes but semantic boundaries reject old progress`() {
+        val run = database.seedRun()
+        inTransaction { store.save(Checkpoint(run.taskId, 0, "old"), run.runId, at) }
+        val source = SourceSnapshot(run.sourceId, SourceDefinition("Public", SourceKind.HTTP_JSON, "https://example.com"), at)
+        val definition = TaskDefinition("Renamed", source.id, CollectionTarget("/observations"), IntervalSchedule(60, at))
+        val snapshot = TaskSnapshot(run.taskId, 2, definition, source)
+        assertThat(inTransaction { store.isCompatible(snapshot) }).isTrue()
+        assertThat(
+            inTransaction { store.isCompatible(snapshot.copy(definition = definition.copy(target = CollectionTarget("/other")))) },
+        ).isFalse()
+        database.execute("UPDATE collection_tasks SET resume_floor=2 WHERE id='${run.taskId}'")
+        assertThat(inTransaction { store.isCompatible(snapshot) }).isFalse()
+        inTransaction { store.save(Checkpoint(run.taskId, 1, "late-old"), run.runId, at) }
+        assertThat(inTransaction { store.find(run.taskId)?.value }).isEqualTo("old")
     }
 
     private fun <T> inTransaction(block: () -> T): T = database.inTransaction(block)

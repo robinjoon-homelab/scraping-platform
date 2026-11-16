@@ -3,6 +3,7 @@ package com.example.template.collection.application.service
 import com.example.template.collection.application.port.output.CheckpointStore
 import com.example.template.collection.application.port.output.CollectedRecordStore
 import com.example.template.collection.application.port.output.CollectionRunRepository
+import com.example.template.collection.domain.run.Checkpoint
 import com.example.template.collection.domain.run.CollectionBatch
 import com.example.template.collection.domain.run.CollectionRequest
 import com.example.template.collection.domain.run.CollectionRun
@@ -44,10 +45,14 @@ class CollectionRunService(
         reason: String,
     ): CollectionRun? = runs.update(run.start(now).fail(now, reason), CollectionRunStatus.PENDING)
 
-    // Builds the request for a run the worker just started. The task's checkpoint is sent only when it was written for the
-    // run's task version: after a plan change the old cursor means nothing, so the source is collected from the start.
-    fun requestFor(running: CollectionRun): CollectionRequest =
-        CollectionRequest(running, checkpoints.find(running.task.taskId)?.takeIf { it.taskVersion == running.task.version })
+    // The checkpoint is reused for the same target and source; management-only revisions preserve progress.
+    fun requestFor(running: CollectionRun): CollectionRequest = CollectionRequest(running, compatibleCheckpoint(running))
+
+    private fun compatibleCheckpoint(running: CollectionRun): Checkpoint? {
+        val checkpoint = checkpoints.find(running.task.taskId) ?: return null
+        if (checkpoint.taskVersion == running.task.version) return checkpoint
+        return checkpoint.copy(taskVersion = running.task.version).takeIf { checkpoints.isCompatible(running.task) }
+    }
 
     // Takes the running run the worker stored, not the run a batch carries. The run is closed first, as a conditional
     // update, and only the worker that closed it stores the batch: a null result (the lease expired and the run was closed

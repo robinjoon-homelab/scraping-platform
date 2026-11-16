@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('실행 이력')}"></head>
+<body th:replace="~{ui/layout :: shell('plans', ~{::content})}">
+<section th:fragment="content" class="app-stack">
+<p class="app-eyebrow">COLLECTION / OPERATIONS</p>
+<h1>실행 이력</h1>
+<p th:replace="~{ui/layout :: notice(${notice}, false)}"></p>
+<p th:replace="~{ui/layout :: notice(${noticeError}, true)}"></p>
+<a th:href="@{/admin/plans/{id}(id=${planId})}">계획으로 돌아가기</a><p class="ui-muted">시각은 UTC입니다. 성공은 수집 저장 완료를 뜻하며 소비자 처리 완료와 다릅니다.</p>
+<th:block th:if="${#lists.isEmpty(runs)}"><div th:replace="~{ui/layout :: emptyState('실행 이력이 없습니다', '계획에서 즉시 실행하거나 활성화해 정기 실행을 시작하세요.')}"></div></th:block>
+<section th:each="run : ${runs}" class="ui-panel app-stack"><h2><a th:href="@{/admin/runs/{id}(id=${run.id})}" th:text="${run.status}"></a></h2><p>예정 <span th:text="${run.scheduled}"></span></p><p>오류 <span th:text="${run.error}"></span></p></section><nav class="app-actions" aria-label="목록 페이지"><a th:if="${offset > 0}" th:href="@{/admin/plans/{id}/runs(id=${planId},offset=${T(java.lang.Math).max(0, offset - 20)})}">이전 20개</a><a th:if="${#lists.size(runs) == 20}" th:href="@{/admin/plans/{id}/runs(id=${planId},offset=${offset + 20})}">다음 20개</a></nav>
+</section></body></html>

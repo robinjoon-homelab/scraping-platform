@@ -54,7 +54,15 @@ class CollectionRunServiceTest {
         assertThat(service.requestFor(running).checkpoint).isNull()
 
         every { checkpoints.find(running.task.taskId) } returns Checkpoint(running.task.taskId, running.task.version - 1, "old")
+        every { checkpoints.isCompatible(running.task) } returns false
         assertThat(service.requestFor(running).checkpoint).isNull()
+    }
+
+    @Test
+    fun `a metadata revision reuses the compatible cursor with the new request version`() {
+        every { checkpoints.find(running.task.taskId) } returns Checkpoint(running.task.taskId, running.task.version - 1, "cursor")
+        every { checkpoints.isCompatible(running.task) } returns true
+        assertThat(service.requestFor(running).checkpoint).isEqualTo(Checkpoint(running.task.taskId, running.task.version, "cursor"))
     }
 
     @Test

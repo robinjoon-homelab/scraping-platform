@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title th:text="${title}">화면</title>
+    <th:block th:if="${_csrf != null}">
+        <meta name="_csrf" th:content="${_csrf.token}">
+        <meta name="_csrf_header" th:content="${_csrf.headerName}">
+    </th:block>
+    <link rel="stylesheet" th:href="@{/ui/tokens.css}">
+    <link rel="stylesheet" th:href="@{/app/theme.css}">
+    <link rel="stylesheet" th:href="@{/ui/components.css}">
+    <link rel="stylesheet" th:href="@{/app/app.css}">
+</head>
+
+<body th:fragment="shell(current, content)" class="ui-shell">
+    <aside class="ui-sidebar">
+        <div th:replace="~{app/nav :: brand}"></div>
+        <nav th:replace="~{app/nav :: items(${current})}"></nav>
+        <form th:replace="~{app/nav :: logout}"></form>
+    </aside>
+    <main class="ui-main" th:insert="${content}"></main>
+</body>
+
+<main th:fragment="loginPanel(action)" class="ui-auth">
+    <div class="ui-panel">
+        <h1>로그인</h1>
+        <th:block th:if="${param.error != null}">
+            <p th:replace="~{ui/layout :: notice('아이디 또는 비밀번호가 올바르지 않습니다.', true)}"></p>
+        </th:block>
+        <th:block th:if="${param.locked != null}">
+            <p th:replace="~{ui/layout :: notice('로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.', true)}"></p>
+        </th:block>
+        <th:block th:if="${param.logout != null}">
+            <p th:replace="~{ui/layout :: notice('로그아웃했습니다.', false)}"></p>
+        </th:block>
+        <form th:action="${action}" method="post">
+            <div class="ui-field">
+                <label for="username">아이디</label>
+                <input class="ui-input" id="username" name="username" type="text" autocomplete="username" required>
+            </div>
+            <div class="ui-field">
+                <label for="password">비밀번호</label>
+                <input class="ui-input" id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+            <button class="ui-button ui-button-primary" type="submit">로그인</button>
+        </form>
+    </div>
+</main>
+
+<p th:fragment="notice(text, isError)" th:unless="${#strings.isEmpty(text)}" class="ui-notice"
+   th:classappend="${isError} ? 'ui-notice-error'" role="status" th:text="${text}">안내</p>
+
+<span th:fragment="badge(label, tone)" class="ui-badge"
+      th:classappend="${tone != null} ? ${'ui-badge-' + tone}" th:text="${label}">상태</span>
+
+<div th:fragment="emptyState(title, body)" class="ui-empty">
+    <strong th:text="${title}">항목이 없습니다</strong>
+    <p th:text="${body}">설명</p>
+</div>
+
+<main th:fragment="errorPage(code, title, detail)" class="ui-error">
+    <p class="ui-muted" th:text="${code}">오류</p>
+    <h1 th:text="${title}">오류</h1>
+    <p th:text="${detail}">설명</p>
+</main>
+</html>

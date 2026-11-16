@@ -1,0 +1,25 @@
+/* Design tokens of the UI kit. Apps override them in app/theme.css, never here. */
+:root {
+    color-scheme: light dark;
+
+    --ui-bg: light-dark(#f6f7f9, #0f1216);
+    --ui-surface: light-dark(#fff, #181c22);
+    --ui-hover: light-dark(#eceff3, #222831);
+    --ui-text: light-dark(#1b1f24, #e6e9ed);
+    --ui-text-muted: light-dark(#5b6470, #9aa4b1);
+    --ui-line: light-dark(#d5dae1, #2e3641);
+    --ui-accent: light-dark(#2457c5, #6c9bff);
+    --ui-on-accent: light-dark(#fff, #0b1020);
+    --ui-success-bg: light-dark(#e3f4e8, #15321f);
+    --ui-success-text: light-dark(#1d6b38, #7fd89a);
+    --ui-warning-bg: light-dark(#fdf1d8, #3a2d0f);
+    --ui-warning-text: light-dark(#8a5a00, #f0c565);
+    --ui-danger-bg: light-dark(#fbe4e2, #3b1a18);
+    --ui-danger-text: light-dark(#a02a22, #ff9a92);
+    --ui-focus: light-dark(#1a47a8, #a9c4ff);
+
+    /* System fonts only: no external font or CDN request is allowed by the CSP. */
+    --ui-font-sans: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+    --ui-font-mono: ui-monospace, "SF Mono", "Cascadia Mono", menlo, consolas, monospace;
+    --ui-radius: 6px;
+}

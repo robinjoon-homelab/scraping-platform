@@ -3,7 +3,7 @@ package com.example.template.collection.domain.run
 import com.example.template.collection.domain.validateCollectionConfiguration
 import java.util.UUID
 
-/** Only the connector interprets the value; changing task versions requires an explicit fresh start. */
+/** The connector interprets the value; services may rebind compatible progress to a management revision. */
 data class Checkpoint(
     val taskId: UUID,
     val taskVersion: Long,

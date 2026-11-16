@@ -11,3 +11,5 @@ data/
 !.env.example
 __pycache__/
 *.pyc
+
+node_modules/
