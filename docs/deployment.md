@@ -20,9 +20,9 @@ GitHub Actions Variables에 다음 값을 설정한다.
 
 | 변수 | 설정할 값 |
 | --- | --- |
-| `HOMELAB_APP_NAME` | `scraping-platform`. 소문자 영숫자·하이픈 1~50자, 시작·끝은 영숫자. |
-| `HOMELAB_REGISTRY_HOST` | `registry.homelab.robinjoon.xyz`. 스킴·경로·포트 없는 호스트. 점이 있는 주소 또는 `localhost`. |
-| `HOMELAB_REGISTRY_IMAGE` | `apps/scraping-platform`. 호스트·태그를 제외한 이미지 경로. |
+| `HOMELAB_APP_NAME` | 소문자 영숫자·하이픈 1~50자. 시작·끝은 영숫자. |
+| `HOMELAB_REGISTRY_HOST` | 스킴·경로·포트 없는 호스트. 점이 있는 주소 또는 `localhost`. |
+| `HOMELAB_REGISTRY_IMAGE` | 호스트·태그를 제외한 이미지 경로. 예: `apps/my-service`. |
 
 - 기존 앱은 하네스의 앱 이름·이미지 repository를 사용한다. 저장소 이름·ID로 대상을 추측하거나 불일치를 앱 삭제·검사 우회로 해결하지 않는다.
 
@@ -41,12 +41,12 @@ GitHub Actions Variables에 다음 값을 설정한다.
 - 공용 배포 파일을 변경하면 다음 검증을 수행한다. 로컬 검증에서 `scripts/deploy.py apply`를 실행하지 않는다.
 
 ```sh
-APP_NAME=scraping-platform REGISTRY_HOST=registry.homelab.robinjoon.xyz \
-  REGISTRY_IMAGE=apps/scraping-platform python3 scripts/deploy.py plan
+APP_NAME=my-service REGISTRY_HOST=registry.homelab.robinjoon.xyz \
+  REGISTRY_IMAGE=apps/my-service python3 scripts/deploy.py plan
 python3 -m unittest discover -s scripts/tests -v
 ./gradlew build
-docker build --platform linux/amd64 --pull -t scraping-platform:local .
-bash scripts/verify-runtime-image.sh scraping-platform:local
+docker build --platform linux/amd64 --pull -t my-service:local .
+bash scripts/verify-runtime-image.sh my-service:local
 ```
 
 ## 배포 실행과 확인
@@ -62,9 +62,4 @@ bash scripts/verify-runtime-image.sh scraping-platform:local
 - 허용 필드는 `database`, `host`, `env`, `serviceAccountName`이다. **최초 생성에만 적용**하며 기존 앱의 설정 변경은 하네스에서 처리한다. 앱 이름을 바꿔 데이터 이전을 대신하지 않는다.
 - `env`에는 **교체할 전체 목록**을 쓰고 prod·DB 설정을 포함한다. URL의 DB명은 `database`와 맞추며, `DB_HOST`는 설정하지 않고 `DB_PORT`는 이를 참조하는 URL보다 먼저 선언한다.
 - 비밀값은 `secretKeyRef`로 지정한다. 참조할 Secret·ServiceAccount를 먼저 준비하고 `plan`으로 최종 설정을 확인한다.
-- 이 앱은 [deployment.json](../.github/deployment.json)으로 DB `scraping_platform`·도메인 `scraping-platform.homelab.robinjoon.xyz`·전체 prod/DB 환경변수와 `SCRAPING_API_TOKEN`을 지정한다. 워크로드 namespace의 Secret `scraping-platform-runtime`, key `api-token`을 준비한다. helper는 비밀값을 조회·생성하지 않는다. 기존 워크로드에는 이 파일이 재적용되지 않으며 토큰 미설정 API는 503으로 닫힌다.
-
-## 관리자 화면 자격
-
-- 런타임 Secret을 통해 `ADMIN_USERNAME`, `ADMIN_PASSWORD`를 제공한다. 기본 계정은 없으며 어느 하나라도 없으면 관리자 화면과 `/docs/**`는 403이다. `ADMIN_PASSWORD`는 `{bcrypt}` 해시를 권장한다. 정확한 평문 길이·잠금·세션 정책은 [관리자 자격](frontend.md#관리자-자격과-닫힘-동작)을 따른다.
-- 기존 워크로드 환경변수는 이 코드 변경으로 반영되지 않는다. 운영 환경변수·하네스·배포는 이번 작업에서 변경하지 않는다. 컨테이너 포트 8080을 유지한다. 운영 HTTPS 뒤 로그인·폼 제출 확인은 배포 담당자가 수행한다.
+- 관리자 화면을 쓰는 앱은 `ADMIN_USERNAME`, `ADMIN_PASSWORD`를 `.github/deployment.json`의 `env`에 `secretKeyRef`로 추가한다. `env`는 전체 교체 목록이므로 위 prod·DB 항목도 함께 쓴다. 기존 앱은 같은 두 변수를 하네스에서 설정한다. 설정하지 않으면 앱은 기동하고 [화면은 닫힌다](frontend.md#관리자-자격과-닫힘-동작).

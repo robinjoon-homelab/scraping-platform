@@ -5,5 +5,5 @@ pluginManagement {
     }
 }
 
-rootProject.name = "scraping-platform"
+rootProject.name = "kotlin-springboot-exposed-template"
 include(":quality-rules")

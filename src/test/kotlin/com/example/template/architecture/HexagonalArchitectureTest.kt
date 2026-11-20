@@ -62,7 +62,9 @@ class HexagonalArchitectureTest {
         private const val ROOT = "com.example.template"
         private val contextAggregates =
             mapOf(
-                "collection" to setOf("source.Source", "task.CollectionTask", "run.CollectionRun"),
+                "todo" to setOf("todo.Todo"),
+                "ordering" to setOf("order.Order", "offer.Offer"),
+                "inventory" to setOf("stock.StockItem"),
             )
         private val aggregateRoots =
             contextAggregates.flatMap { (context, roots) -> roots.map { "$ROOT.$context.domain.$it" } }

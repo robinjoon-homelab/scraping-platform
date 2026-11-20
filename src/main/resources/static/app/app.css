@@ -1,44 +1,4 @@
-.app-stack {
-    display: grid;
-    gap: 20px;
-    min-width: 0;
-}
-
-.app-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-}
-
-.app-eyebrow {
+.todo-done {
     color: var(--ui-text-muted);
-    font-size: 12px;
-    letter-spacing: 0.12em;
-}
-
-pre {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    max-width: 100%;
-    margin: 0;
-    font-family: var(--ui-font-mono);
-}
-
-code,
-dd {
-    overflow-wrap: anywhere;
-}
-
-dd {
-    margin-left: 0;
-    margin-bottom: 12px;
-}
-
-.ui-panel {
-    min-width: 0;
-}
-
-textarea {
-    resize: vertical;
+    text-decoration: line-through;
 }

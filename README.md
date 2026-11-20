@@ -1,4 +1,4 @@
-# Scraping Platform
+# Kotlin · Spring Boot · Exposed 템플릿
 
 ## 작업 시작
 
@@ -8,17 +8,13 @@
 
 ## 사용 범위
 
-- 출처·수집 계획의 생성·조회·수정과 실행·레코드 조회를 제공한다. HTTP_JSON만 실행하며 RSS_ATOM·HTML은 활성화·즉시 실행에서 거부한다. enabled=true면 다음 슬롯부터 주기 실행하며 credentialRef가 있는 출처도 활성화·즉시 실행에서 거부한다.
-- `/api`는 `SCRAPING_API_TOKEN` Bearer 인증을 사용하는 단일 운영자용이다. 사용자별 계정·데이터 분리는 제공하지 않는다. 다중 사용자나 공개 이용을 추가하기 전에 요구에 맞는 인증·인가·데이터 범위를 구현한다.
-- URL·일반 매개변수에 비밀값을 넣지 않는다. `credentialRef`에는 참조 이름만 저장하며 현재 비밀 조회 기능은 없다.
+- 인증·인가·사용자별 데이터 분리를 구현하기 전에는 실제 사용자 데이터를 취급하지 않는다. 공개 예제에는 샘플 데이터만 사용한다.
 
 ## 작업별 원본
-
-- [수집 플랫폼 설계](docs/collection-platform-design.md): 장기 목표와 이번 구현 범위.
 
 - [아키텍처](docs/ddd-architecture.md): BC·어그리게이트 선정과 계층·트랜잭션 규칙.
 - [코드 품질](docs/code-quality.md): 수치 제한·예외·금지 사항.
 - [개발 절차](docs/development.md): 기능·API·DB 변경, 테스트 범위와 검증.
+- [화면](docs/frontend.md): 파일 소유·화면 추가·UI 검사·관리자 자격·키트 갱신·화면 제거.
 - [배포](docs/deployment.md): 공용 파일 유지·앱별 설정·실행·확인.
 - [검사기 유지보수](docs/quality-maintenance.md): 검사 규칙·빌드 연결을 바꿀 때만 참조.
-- [Agent Docs 연동 결정](docs/agent-docs-integration.md): 인증된 pull export와 수신기 후속 작업.

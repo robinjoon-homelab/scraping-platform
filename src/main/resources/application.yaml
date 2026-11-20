@@ -1,13 +1,13 @@
 spring:
   application:
-    name: scraping-platform
+    name: kotlin-springboot-exposed-template
   threads:
     virtual:
       enabled: true
   main:
     keep-alive: true
   datasource:
-    url: ${DB_URL:jdbc:h2:file:./data/application;MODE=PostgreSQL;DB_CLOSE_ON_EXIT=FALSE}
+    url: ${DB_URL:jdbc:h2:file:./data/application;DB_CLOSE_ON_EXIT=FALSE}
     username: ${DB_USERNAME:sa}
     password: ${DB_PASSWORD:}
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
@@ -23,23 +23,6 @@ spring:
       enabled: true
   lifecycle:
     timeout-per-shutdown-phase: 30s
-
-scraping:
-  security:
-    api-token: ${SCRAPING_API_TOKEN:}
-  worker:
-    enabled: true
-    interval: 30s
-    batch-size: 10
-    # The lease must be longer than the connector's whole timeout, or a run still being collected is closed as expired.
-    lease-duration: 5m
-  connector:
-    http:
-      connect-timeout: 5s
-      # Deadline of a whole collection (DNS checks, connection and body); keep it well below worker.lease-duration.
-      response-timeout: 10s
-      # At most the record payload limit of 1,000,000 characters, so every accepted body fits one record.
-      max-body-bytes: 1000000
 
 app:
   admin:

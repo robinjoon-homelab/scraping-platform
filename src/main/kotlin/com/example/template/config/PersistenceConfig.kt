@@ -1,33 +1,12 @@
 package com.example.template.config
 
-import com.example.template.collection.adapter.outbound.persistence.ExposedCheckpointStore
-import com.example.template.collection.adapter.outbound.persistence.ExposedCollectedRecordStore
-import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionRunRepository
-import com.example.template.collection.adapter.outbound.persistence.ExposedCollectionTaskRepository
-import com.example.template.collection.adapter.outbound.persistence.ExposedSourceRepository
-import com.example.template.collection.application.port.output.CheckpointStore
-import com.example.template.collection.application.port.output.CollectedRecordStore
-import com.example.template.collection.application.port.output.CollectionRunRepository
-import com.example.template.collection.application.port.output.CollectionTaskRepository
-import com.example.template.collection.application.port.output.SourceRepository
+import com.example.template.todo.adapter.outbound.persistence.ExposedTodoRepository
+import com.example.template.todo.application.port.output.TodoRepository
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import tools.jackson.databind.json.JsonMapper
 
 @Configuration(proxyBeanMethods = false)
 class PersistenceConfig {
     @Bean
-    fun sourceRepository(): SourceRepository = ExposedSourceRepository()
-
-    @Bean
-    fun collectionTaskRepository(jsonMapper: JsonMapper): CollectionTaskRepository = ExposedCollectionTaskRepository(jsonMapper)
-
-    @Bean
-    fun collectionRunRepository(jsonMapper: JsonMapper): CollectionRunRepository = ExposedCollectionRunRepository(jsonMapper)
-
-    @Bean
-    fun collectedRecordStore(): CollectedRecordStore = ExposedCollectedRecordStore()
-
-    @Bean
-    fun checkpointStore(): CheckpointStore = ExposedCheckpointStore()
+    fun todoRepository(): TodoRepository = ExposedTodoRepository()
 }

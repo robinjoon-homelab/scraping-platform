@@ -4,8 +4,8 @@
 
 - `JAVA_HOME`을 JDK 25로 설정하고 저장소의 `./gradlew`를 사용한다. 전역 Gradle을 사용하지 않는다.
 - 의존성 변경 전 `build.gradle.kts`와 `gradle/wrapper/gradle-wrapper.properties`의 버전을 확인한다.
-- 로컬 API는 `http://localhost:8080`으로 호출하고 `Authorization: Bearer <SCRAPING_API_TOKEN>`을 보낸다. 토큰 미설정은 503, 누락·불일치는 401이다. health는 공개이며 API 문서는 관리자 로그인이 필요하다. H2 개발 DB를 초기화할 때는 앱을 종료하고 필요한 데이터를 백업한 뒤 `data/`를 삭제한다.
-- 기본 프로필의 DB 연결은 `DB_URL`·`DB_USERNAME`·`DB_PASSWORD` 또는 표준 `SPRING_DATASOURCE_URL`·`SPRING_DATASOURCE_USERNAME`·`SPRING_DATASOURCE_PASSWORD`로 지정한다. H2 외의 DB에는 `DB_DRIVER`도 설정한다. 레코드·체크포인트 저장이 `ON CONFLICT DO NOTHING`을 쓰므로 H2는 기본 URL처럼 `MODE=PostgreSQL`로 연결해야 하며, 호환 모드가 없는 H2는 지원하지 않는다.
+- 로컬 API는 `http://localhost:8080`으로 호출한다. H2 개발 DB를 초기화할 때는 앱을 종료하고 필요한 데이터를 백업한 뒤 `data/`를 삭제한다.
+- 기본 프로필의 DB 연결은 `DB_URL`·`DB_USERNAME`·`DB_PASSWORD` 또는 표준 `SPRING_DATASOURCE_URL`·`SPRING_DATASOURCE_USERNAME`·`SPRING_DATASOURCE_PASSWORD`로 지정한다. H2 외의 DB에는 `DB_DRIVER`도 설정한다.
 - 운영 PostgreSQL에는 [배포 계약](deployment.md#컨테이너와-db-계약)의 `prod` 프로필을 사용한다. DB 파일·자격 증명을 커밋하지 않는다.
 
 ## 기능 변경
@@ -31,7 +31,6 @@
 - 내부의 특정 함수·의존성을 호출했는지, 호출하지 않았는지, 몇 번·어떤 순서·인자로 호출했는지는 검증하지 않는다. MockK의 `verify`·`verifySequence`·`confirmVerified`뿐 아니라 spy·호출 기록·카운터·인자 캡처로 같은 검증을 우회하지 않는다. MockK는 의존성의 입력과 응답을 준비하는 데 사용한다.
 - 기존 테스트에 결과 단언이 있으면 호출 검증만 제거한다. 호출 검증만 있는 테스트는 같은 단위의 결과 검증으로 바꾸고, 변경이 어려우면 삭제한다. 테스트를 유지하려고 운영 계약을 바꾸거나 통합 테스트·가짜 저장소를 추가하지 않는다.
 
-
 | 대상 | 방식 |
 | --- | --- |
 | 도메인 모델·값 | 프레임워크와 모킹 없이 순수 단위 테스트로 검증한다. |
@@ -44,18 +43,19 @@
 
 ## API 변경
 
-- `*ApiDocumentationTest`에서 입력 포트를 MockK로 대체하고 MockMvc로 실제 컨트롤러·`OperatorTokenFilter`·요청 검증·직렬화·예외 변환의 요청·응답·상태 코드와 필요한 검증 오류·없는 리소스 응답을 검증한다. DB와 서비스 구현을 연결하지 않는다.
+- `*ApiDocumentationTest`에서 입력 포트를 MockK로 대체하고 MockMvc로 실제 컨트롤러·요청 검증·직렬화·예외 변환의 요청·응답·상태 코드와 필요한 검증 오류·없는 리소스 응답을 검증한다. DB와 서비스 구현을 연결하지 않는다.
 - API 변경과 함께 REST Docs 필드 설명을 수정하고 `src/docs/asciidoc/index.adoc`에 생성 스니펫을 연결한다.
-- HTTP 상세를 README·개발 가이드에 재작성하지 않는다. 업무 규칙은 [아키텍처 문서](ddd-architecture.md#현재-업무-규칙)에서 관리한다.
+- HTTP 상세를 README·개발 가이드에 재작성하지 않는다. 업무 규칙은 [아키텍처 문서](ddd-architecture.md#예제의-업무-규칙)에서 관리한다.
 - `build/generated-snippets`와 `build/docs/asciidoc/index.html`을 직접 편집하지 않는다.
-- 생성 문서는 전체 빌드가 만든 `build/docs/asciidoc/index.html`과 `application.jar`의 `BOOT-INF/classes/static/docs/index.html`로 확인한다. 화면으로 볼 때는 `java -jar build/libs/application.jar`로 실행해 `http://localhost:8080/docs/index.html`만 열고 `bootRun`을 사용하지 않는다. 이 확인은 HTTP 업무 시나리오 검증이 아니다.
+- 생성 문서는 전체 빌드가 만든 `build/docs/asciidoc/index.html`과 `application.jar`의 `BOOT-INF/classes/static/docs/index.html`로 확인한다. 화면으로 볼 때는 `ADMIN_USERNAME`, `ADMIN_PASSWORD`를 일회용 값으로 설정하고 `java -jar build/libs/application.jar`로 실행해 `http://localhost:8080/docs/index.html`만 열어 로그인하고 `bootRun`을 사용하지 않는다. 자격을 설정하지 않으면 `/docs/**`는 [403](frontend.md#관리자-자격과-닫힘-동작)이다. 이 확인은 HTTP 업무 시나리오 검증이 아니다.
 
 ## 스키마 변경
 
 - `src/main/resources/db/migration`의 마지막 버전 다음 번호로 `V<번호>__describe_change.sql`을 추가한다. 배포된 마이그레이션은 수정하지 않는다.
 - Flyway로만 DDL을 적용하고 `spring.exposed.generate-ddl=false`를 유지한다.
 - 기존 데이터 변환·새 제약의 테스트 작성 여부와 방식은 [테스트 범위](#테스트-범위)를 따른다. 여러 저장 작업에는 [트랜잭션 계약](ddd-architecture.md#트랜잭션)을 적용한다.
-- 배포된 `V1__create_todos.sql`과 `V2__create_collection_configuration.sql`을 보존하고 새 변경은 V3 이후로 추가한다. Todo API는 없지만 기존 테이블·데이터를 삭제하지 않는다.
+- V1~V3에서 V4로 업그레이드할 때 기존 주문의 SKU·수량과 조회·취소 동작을 보존한다. 과거 주문에서 Offer를 자동 생성하지 않는다.
+- 배포하지 않은 과거 이벤트 초안 V2~V5를 적용한 개인 개발 DB에서 체크섬·스키마 충돌이 나면 필요한 데이터를 백업한 뒤 해당 DB만 다시 만든다. 자동 초기화하지 않는다.
 
 ## 실행과 검증
 
@@ -63,17 +63,17 @@
 
 ```sh
 java -version
-export SCRAPING_API_TOKEN="$(openssl rand -hex 32)"
 ./gradlew bootRun
 ```
 
 변경에 해당하는 검증을 먼저 실행한다. 애플리케이션 테스트를 선별할 때는 `:test` 태스크를 지정한다.
 
-- 도메인·유스케이스: `./gradlew :test --tests '*CollectionTaskServiceTest'`처럼 대상 테스트를 지정한다.
-- RDB 어댑터: `./gradlew :test --tests '*ExposedCollectionTaskRepositoryTest'`처럼 대상 어댑터 테스트를 지정한다.
+- 도메인·유스케이스: `./gradlew :test --tests '*OrderServiceTest'`처럼 대상 테스트를 지정한다.
+- RDB 어댑터: `./gradlew :test --tests '*ExposedOrderRepositoryTest'`처럼 대상 어댑터 테스트를 지정한다.
 - HTTP·문서: `./gradlew :test --tests '*ApiDocumentationTest'`.
 - 형식: 수정은 `./gradlew ktlintFormat`, 확인은 `./gradlew ktlintCheck`.
 - 검사 규칙: `./gradlew detektMain detektTest`, `./gradlew :quality-rules:test`. [검사기 지침](quality-maintenance.md)의 회귀 범위도 확인한다.
+- 화면: `./gradlew uiCheck`. 포맷 수정은 [화면 검증](frontend.md#검증)을 따른다.
 - 배포 스크립트: [배포 없이 검증](deployment.md#배포-없이-검증)의 Python 테스트도 실행한다.
 
 마지막에 전체 빌드와 diff를 확인한다.
@@ -86,15 +86,12 @@ git diff
 
 - 전체 빌드의 규칙 테스트·REST Docs 생성을 생략하지 않는다.
 - 검증 후 ktlint 자동 수정도 검토한다. 커밋할 때 자동 수정 파일을 빠뜨리지 않는다.
-- 실패 시 `build/reports/tests/test/`, `build/reports/detekt/`, `quality-rules/build/reports/tests/test/`를 확인한다.
+- 실패 시 `build/reports/tests/test/`, `build/reports/detekt/`, `quality-rules/build/reports/tests/test/`를 확인한다. html-validate 실패는 `build/rendered-ui/`의 렌더링 결과를 확인한다.
 
 ## 템플릿 적용
 
 1. [Use this template](https://github.com/robinjoon-homelab/kotlin-springboot-exposed-template/generate)로 서비스 저장소를 만들고 복제한다. 첫 `main`·`master` 푸시 전에 [배포 전 설정](deployment.md#배포-전-설정)을 끝낸다.
 2. 프로젝트명·패키지를 바꾸면 `settings.gradle.kts`, 소스·테스트의 선언·경로, `HexagonalArchitectureTest`의 `ROOT`와 시작 클래스 단언, 애플리케이션 이름을 함께 변경한다. 시작 클래스명을 바꾸면 `ArchitectureRules`의 `applicationClass` 인자도 맞춘다.
 3. 공용 배포 파일과 `application.jar` 이름을 유지하고 앱 이름·이미지 경로는 [배포 변수](deployment.md#배포-이름과-이미지-설정)로 지정한다.
-4. `./gradlew build`로 확인한다.
-
-## 관리자 화면 개발
-
-[화면 작업 지침](frontend.md)에 따라 앱 소유 템플릿·스타일과 페이지 어댑터를 수정한다. `ADMIN_USERNAME`·`ADMIN_PASSWORD`가 없으면 관리자 화면·문서는 403이다. `./gradlew uiCheck`로 렌더링·HTML·CSS·JS·키트 불변성을 확인한다. `build/rendered-ui/`는 페이지 테스트가 생성하며 직접 수정하지 않는다.
+4. 메뉴는 `src/main/resources/templates/app/nav.html`, 테마는 `src/main/resources/static/app/theme.css`에서 바꾼다. [화면 지침](frontend.md#토큰-덮어쓰기)을 따른다. 화면이 필요 없으면 [제거 절차](frontend.md#화면이-필요-없는-앱의-제거)를 실행한다.
+5. `./gradlew build`로 확인한다.
