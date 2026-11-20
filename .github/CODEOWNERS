@@ -23,4 +23,7 @@ gradle.properties @robinjoon
 /AGENTS.md @robinjoon
 /CLAUDE.md @robinjoon
 /docs/code-quality.md @robinjoon
+/docs/ddd-architecture.md @robinjoon
 /docs/development.md @robinjoon
+/docs/deployment.md @robinjoon
+/docs/quality-maintenance.md @robinjoon

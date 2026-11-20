@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{ui/layout :: head('할 일')}"></head>
+<body th:replace="~{ui/layout :: shell('todos', ~{::section})}">
+<section>
+    <div class="ui-page-head">
+        <h1>할 일</h1>
+        <p class="ui-muted" th:text="${'남은 할 일 ' + view.remaining + '개'}">남은 할 일 0개</p>
+    </div>
+
+    <p th:replace="~{ui/layout :: notice(${notice}, ${noticeError})}"></p>
+
+    <form class="ui-panel" th:action="@{/admin/todos}" method="post">
+        <div class="ui-field">
+            <label for="todo-title">제목</label>
+            <input class="ui-input" id="todo-title" name="title" type="text" maxlength="200" required>
+        </div>
+        <button class="ui-button ui-button-primary" type="submit">추가</button>
+    </form>
+
+    <th:block th:if="${view.rows.isEmpty()}">
+        <div th:replace="~{ui/layout :: emptyState('아직 할 일이 없습니다', '위 입력란에서 첫 할 일을 추가하세요.')}"></div>
+    </th:block>
+
+    <div th:unless="${view.rows.isEmpty()}" class="ui-table-wrap">
+        <table class="ui-table">
+            <caption>할 일 목록</caption>
+            <thead>
+            <tr>
+                <th scope="col">제목</th>
+                <th scope="col">상태</th>
+                <th scope="col">작업</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="row : ${view.rows}">
+                <td th:text="${row.title}" th:classappend="${row.completed} ? 'todo-done'">제목</td>
+                <td>
+                    <th:block th:if="${row.completed}">
+                        <span th:replace="~{ui/layout :: badge('완료', 'success')}"></span>
+                    </th:block>
+                    <th:block th:unless="${row.completed}">
+                        <span th:replace="~{ui/layout :: badge('진행 중', 'warning')}"></span>
+                    </th:block>
+                </td>
+                <td>
+                    <form th:unless="${row.completed}" th:action="@{/admin/todos/{id}/complete(id=${row.id})}" method="post">
+                        <button class="ui-button" type="submit">완료</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

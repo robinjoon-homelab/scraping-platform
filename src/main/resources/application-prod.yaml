@@ -5,16 +5,16 @@ spring:
     password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
 
-management:
-  endpoint:
-    health:
-      group:
-        readiness:
-          include: readinessState,db
-
 server:
   forward-headers-strategy: native
   servlet:
     session:
       cookie:
         secure: true
+
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db

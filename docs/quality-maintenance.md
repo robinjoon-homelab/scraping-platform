@@ -1,6 +1,6 @@
 # 품질 검사 유지보수
 
-**detekt 설정·Gradle 검사 연결·사용자 정의 규칙·ArchUnit 검사기·fixture를 바꿀 때만** 읽는다. 수치와 허용 예외는 [코드 품질 규칙](code-quality.md), 앱 경계는 [아키텍처와 도메인 경계](ddd-architecture.md), 명령은 [실행과 검증](development.md#실행과-검증)을 따른다.
+**detekt 설정·Gradle 검사 연결·사용자 정의 규칙·ArchUnit 검사기·fixture·UI 검사기를 바꿀 때만** 읽는다. 수치와 허용 예외는 [코드 품질 규칙](code-quality.md), 앱 경계는 [아키텍처와 도메인 경계](ddd-architecture.md), 명령은 [실행과 검증](development.md#실행과-검증)을 따른다.
 
 ## 변경 원칙
 
@@ -13,7 +13,7 @@
 - detekt는 **`2.0.0-alpha.6`으로 고정**한다. 루트 `build.gradle.kts`의 플러그인·`toolVersion`과 `quality-rules/build.gradle.kts`의 `detektVersion`을 함께 바꾸고, 업그레이드하면 JDK 25·Kotlin 호환성과 사용자 정의 규칙 회귀를 확인한다.
 - `config.validation`, `warningsAsErrors`, `ignoreFailures=false`, `failOnSeverity=Error`를 유지하고 관례 기반 baseline을 쓰지 않는다. `LargeClass`의 warning은 리뷰 신호로 둔다.
 - `NestedBlockDepth`·`TooManyFunctions`는 끈 상태로 둔다.
-- 강제 규칙·허용 예외를 바꾸면 [`ForbiddenSuppress`](../config/detekt/detekt.yml) 목록과 [억제 정책](code-quality.md#예외와-억제)을 함께 확인한다. 별도 소스 검사기를 추가하지 않는다.
+- 강제 규칙·허용 예외를 바꾸면 [`ForbiddenSuppress`](../config/detekt/detekt.yml) 목록과 [억제 정책](code-quality.md#예외와-억제)을 함께 확인한다. Kotlin 소스를 검사하는 별도 소스 검사기를 추가하지 않는다.
 - `test`·`check`는 `detektMain`·`detektTest`와 규칙 fixture 테스트를 실행하고, 공개 `detekt`도 두 타입 분석을 포함한다. 타입 분석 없는 기본 태스크로 되돌리지 않는다.
 - 컴파일을 `detektMain`에 의존시키지 않는다.
 - `detektTest`는 공통·테스트 설정을 함께 읽고 비활성 plain JAR가 아닌 실제 main/test 클래스 출력 경로를 쓴다. `detekt.use.worker.api=true`를 유지한다.
@@ -26,6 +26,17 @@ detekt는 분석 전에 컴파일된 규칙 JAR를 플러그인으로 읽으므�
 
 - 앱 detekt는 `src/main`·`src/test`를 검사한다. `quality-rules`에는 자기 detekt를 적용하지 않고 ktlint·fixture 테스트를 적용하며, 전체 `build`가 이 테스트를 포함한다.
 - `CleanCodeRuleSetProvider`가 `clean-code` 규칙 `LogicalNestingDepth`·`NoMutableCollectionExposure`·`MaximumFunctionLength`를 등록한다. 동작은 [코드 품질 규칙](code-quality.md)의 조건과 맞추고 조건마다 회귀 fixture를 유지한다.
+
+## UI 검사기
+
+규칙의 원본은 [화면 지침](frontend.md#검사-규칙)이다.
+
+- 린트 규칙을 바꾸면 `src/test/ui/lint-rules.test.mjs`의 정상·위반·경계 사례를 함께 고친다.
+- Thymeleaf 원본 규칙을 바꾸면 `ThymeleafSourceRulesTest`의 정상·위반·경계 사례를 함께 고친다.
+- 키트 파일을 바꾸면 [키트 갱신](frontend.md#키트-갱신)의 `--write-manifest`를 실행한다.
+- 키트 경로 목록을 바꾸면 `scripts/sync-ui-kit.py`의 `KIT_FILES`·`KIT_DIRS`와 `UiKitManifest`의 `kitFiles`·`kitDirs`를 함께 고친다.
+- 도구 버전은 범위 지정자 없이 고정하고 공개 후 2주가 지난 버전만 쓴다. Node·pnpm 버전은 `config/ui/tool-versions.properties`에서 바꾼다.
+- `uiCheck`를 `check`에 연결한 상태로 유지하고 검사가 파일을 수정하게 하지 않는다. 검사 대상과 렌더링 결과가 0개일 때의 실패를 유지한다.
 
 ## 아키텍처 검사기
 
@@ -86,8 +97,3 @@ detekt는 분석 전에 컴파일된 규칙 JAR를 플러그인으로 읽으므�
 - 정상 fixture는 해당 `all()`을 통과해야 한다. 위반 fixture는 정확한 클래스를 찾고, 기대 규칙이 `all()`에 포함되어 실제로 실패하는지 확인한다.
 - 한 BC의 여러 루트와 독립 BC에 공통·DDD·BC 검사를 함께 적용한다. ID 참조 허용 사례는 value class 소거로 빈 검사가 되지 않게 실제 바이트코드 의존을 단언한다.
 - 루트 밖 클래스 위치, 고립된 순환, 직접·합성·상속 트랜잭션, 데이터 계약, Kotlin 생성 멤버를 회귀 사례로 유지한다.
-
-## UI 검사기
-
-- 공용 UI 키트는 [화면 지침](frontend.md#검사-규칙)의 원본·렌더링·해시 검사를 유지한다. 앱에서 매니페스트를 재생성해 변경을 숨기지 않는다. `scripts/sync-ui-kit.py --source <템플릿>`으로만 갱신한다.
-- `uiCheck`는 `check`에 연결하며 고정 Node·pnpm을 사용한다. 렌더링 결과가 없으면 실패해야 한다. 키트 갱신은 `python3 -m unittest discover -s scripts/tests -p test_sync_ui_kit.py`도 실행한다.

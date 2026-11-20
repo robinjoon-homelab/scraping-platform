@@ -11,9 +11,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 @Configuration(proxyBeanMethods = false)
 class AdminWebConfig : WebMvcConfigurer {
     override fun addViewControllers(registry: ViewControllerRegistry) {
-        registry.addRedirectViewController("/", "/admin/plans")
         registry.addViewController(ADMIN_LOGIN_PATH).setViewName("app/login")
-        registry.addRedirectViewController("/admin", "/admin/plans")
+        registry.addRedirectViewController("/admin", "/admin/todos")
     }
 
     // Runs before the security chain, so that its 302 and 403 responses carry the headers too.

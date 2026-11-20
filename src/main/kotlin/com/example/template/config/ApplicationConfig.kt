@@ -1,79 +1,20 @@
 package com.example.template.config
 
-import com.example.template.collection.application.port.input.CollectionRunQueryUseCase
-import com.example.template.collection.application.port.input.CollectionSchedulingUseCase
-import com.example.template.collection.application.port.input.CollectionTaskUseCase
-import com.example.template.collection.application.port.input.CollectionWorkerUseCase
-import com.example.template.collection.application.port.input.SourceUseCase
-import com.example.template.collection.application.port.output.CheckpointStore
-import com.example.template.collection.application.port.output.CollectedRecordStore
-import com.example.template.collection.application.port.output.CollectionConnectorPort
-import com.example.template.collection.application.port.output.CollectionRunRepository
-import com.example.template.collection.application.port.output.CollectionTaskRepository
-import com.example.template.collection.application.port.output.SourceRepository
-import com.example.template.collection.application.service.CollectionRunQueryService
-import com.example.template.collection.application.service.CollectionRunService
-import com.example.template.collection.application.service.CollectionSchedulingService
-import com.example.template.collection.application.service.CollectionSlotService
-import com.example.template.collection.application.service.CollectionTaskService
-import com.example.template.collection.application.service.CollectionWorkerService
-import com.example.template.collection.application.service.SourceService
-import org.springframework.boot.context.properties.EnableConfigurationProperties
+import com.example.template.todo.application.port.input.TodoUseCase
+import com.example.template.todo.application.port.output.TodoRepository
+import com.example.template.todo.application.service.TodoService
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import java.time.Clock
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(WorkerProperties::class)
 class ApplicationConfig {
     @Bean
     fun clock(): Clock = Clock.systemUTC()
 
     @Bean
-    fun sourceUseCase(
-        repository: SourceRepository,
+    fun todoUseCase(
+        repository: TodoRepository,
         clock: Clock,
-    ): SourceUseCase = SourceService(repository, clock)
-
-    @Bean
-    fun collectionTaskUseCase(
-        repository: CollectionTaskRepository,
-        sources: SourceRepository,
-        clock: Clock,
-    ): CollectionTaskUseCase = CollectionTaskService(repository, sources, clock)
-
-    @Bean
-    fun collectionRunQueryUseCase(
-        tasks: CollectionTaskRepository,
-        runs: CollectionRunRepository,
-        records: CollectedRecordStore,
-    ): CollectionRunQueryUseCase = CollectionRunQueryService(tasks, runs, records)
-
-    @Bean
-    fun collectionSlotService(
-        tasks: CollectionTaskRepository,
-        sources: SourceRepository,
-        runs: CollectionRunRepository,
-    ): CollectionSlotService = CollectionSlotService(tasks, sources, runs)
-
-    @Bean
-    fun collectionSchedulingUseCase(
-        slots: CollectionSlotService,
-        clock: Clock,
-    ): CollectionSchedulingUseCase = CollectionSchedulingService(slots, clock)
-
-    @Bean
-    fun collectionRunService(
-        runs: CollectionRunRepository,
-        records: CollectedRecordStore,
-        checkpoints: CheckpointStore,
-    ): CollectionRunService = CollectionRunService(runs, records, checkpoints)
-
-    @Bean
-    fun collectionWorkerUseCase(
-        runs: CollectionRunService,
-        connector: CollectionConnectorPort,
-        clock: Clock,
-        properties: WorkerProperties,
-    ): CollectionWorkerUseCase = CollectionWorkerService(runs, connector, clock, properties.leaseDuration)
+    ): TodoUseCase = TodoService(repository, clock)
 }

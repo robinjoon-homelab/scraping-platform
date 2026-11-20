@@ -161,11 +161,3 @@ Thymeleaf 화면·공용 UI 키트·관리자 인증을 바꿀 때 읽는다. �
 
 - 제거한 앱은 화면을 추가하기 전 템플릿과 같아진다. `/docs/**`는 지금과 달리 로그인 없이 공개된다.
 - `/docs/**`를 보호해야 하는 앱은 위 절차를 실행하지 않고 Security 부분을 남긴다. 로그인 화면이 Thymeleaf와 키트를 쓰므로 `config/Admin*`, `adapter/inbound/web/`, Thymeleaf·Security 의존성, `app.admin`, `server.servlet.session`, `server.forward-headers-strategy`, 키트와 `templates/app/`, `static/app/`, 대응 테스트를 유지하고 예제(`TodoPageController.kt`, `view/`, `TodoPageControllerTest.kt`, `templates/admin/`)만 지운다. `AdminWebConfig`의 `/admin` 리다이렉트 대상은 `/docs/index.html`로 바꾼다.
-
-## 수집 플랫폼 화면
-
-- 원본 템플릿 master `ee0cebaaf3716c102fe81727d416722c0df1b066`에서 키트를 동기화했다. 보안·렌더링 지원과 Gradle 검사는 별도로 가져왔다.
-- `/admin/sources`에서 공개 JSON 출처를 등록하고 `/admin/plans`에서 계획·대상·매개변수·주기를 관리한다. 실행 이력·레코드·계획별 내보내기는 계획 화면에서 연다.
-- HTTP JSON 응답 묶음이 레코드 하나다. RSS·HTML·인증 원천은 실행 가능하다고 표시하지 않는다. 미리보기는 저장·진행 위치·일정을 바꾸지 않으며 본문은 4,000자까지 표시한다.
-- 내보내기는 Bearer 인증 Pull이며 소비자의 처리 위치·문서 생성 완료를 추적하지 않는다. Agent Docs F8의 처리 대기·가공·완료는 후속 작업이다.
-- API는 기존 Bearer 필터를 유지한다. 관리자 세션은 API 인증을 대신하지 않으며 HTML에 API 토큰을 넣지 않는다.
